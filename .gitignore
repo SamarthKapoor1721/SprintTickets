@@ -1,0 +1,39 @@
+# ---- Python / backend ----
+backend/venv/
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local SQLite dev database (recreate with: alembic upgrade head && python -m app.seed)
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- Environment / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Node / frontend ----
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# ---- Editor / OS ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.log

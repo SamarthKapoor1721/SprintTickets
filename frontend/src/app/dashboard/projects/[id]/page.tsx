@@ -1,0 +1,330 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
+import { useParams, useRouter } from "next/navigation"
+import { motion } from "framer-motion"
+import { ArrowLeft, ChevronRight, Crown, Trash2, UserPlus, X } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  addMember,
+  deleteProject,
+  getProject,
+  listMembers,
+  listReviews,
+  listUsers,
+  removeMember,
+  type Project,
+  type Review,
+  type User,
+} from "@/lib/api"
+
+const statusStyles: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-700",
+  completed: "bg-blue-100 text-blue-700",
+  on_hold: "bg-amber-100 text-amber-700",
+}
+const reviewStatusStyles: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-700",
+  approved: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-red-100 text-red-700",
+  needs_changes: "bg-orange-100 text-orange-700",
+}
+
+function initials(u: User) {
+  return (u.full_name ?? u.email).slice(0, 1).toUpperCase()
+}
+
+function Avatar({ u, lead }: { u: User; lead?: boolean }) {
+  return (
+    <div className="relative">
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-primary to-blue-600 text-xs font-bold text-white">
+        {initials(u)}
+      </div>
+      {lead && (
+        <Crown className="absolute -right-1 -top-1 h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+      )}
+    </div>
+  )
+}
+
+export default function ProjectDetailPage() {
+  const params = useParams<{ id: string }>()
+  const router = useRouter()
+  const id = Number(params.id)
+
+  const [project, setProject] = useState<Project | null>(null)
+  const [members, setMembers] = useState<User[]>([])
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [role, setRole] = useState<string>("employee")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  const canManage = role === "ceo" || role === "manager"
+
+  const load = useCallback(() => {
+    Promise.all([getProject(id), listMembers(id), listReviews({ projectId: id })])
+      .then(([p, m, r]) => {
+        setProject(p)
+        setMembers(m)
+        setReviews(r)
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load project"))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  useEffect(() => {
+    const r = localStorage.getItem("userRole") ?? "employee"
+    setRole(r)
+    load()
+    if (r === "ceo" || r === "manager") listUsers().then(setAllUsers).catch(() => {})
+  }, [load])
+
+  const memberIds = new Set(members.map((m) => m.id))
+  const addable = allUsers.filter((u) => !memberIds.has(u.id))
+
+  const handleAdd = async () => {
+    if (!selected) return
+    setBusy(true)
+    setError(null)
+    try {
+      setMembers(await addMember(id, Number(selected)))
+      setSelected("")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add member")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRemove = async (userId: number) => {
+    setBusy(true)
+    setError(null)
+    try {
+      setMembers(await removeMember(id, userId))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove member")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await deleteProject(id)
+      router.push("/dashboard/projects")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete project")
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <div className="text-sm text-slate-500">Loading project…</div>
+  if (error && !project)
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {error}
+      </div>
+    )
+  if (!project) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-auto flex max-w-4xl flex-col gap-6"
+    >
+      <Link
+        href="/dashboard/projects"
+        className="flex w-fit items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-900 cursor-pointer"
+      >
+        <ArrowLeft className="h-4 w-4" /> All teams
+      </Link>
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{project.name}</h1>
+            <Badge className={`border-none capitalize ${statusStyles[project.status] ?? ""}`}>
+              {project.status.replace("_", " ")}
+            </Badge>
+          </div>
+          <p className="text-slate-600">{project.description ?? "No description provided."}</p>
+          <p className="text-sm text-slate-400">{project.department ?? "No department"}</p>
+        </div>
+
+        {canManage && (
+          <Dialog>
+            <DialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  className="gap-2 text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
+              }
+            />
+            <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete this team?</DialogTitle>
+                <DialogDescription className="text-slate-500">
+                  This permanently deletes <span className="font-medium text-slate-700">{project.name}</span> and
+                  its team. Its reviews are kept but detached from the project. This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose render={<Button variant="ghost" className="text-slate-500 cursor-pointer">Cancel</Button>} />
+                <Button
+                  onClick={handleDelete}
+                  disabled={busy}
+                  className="bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+                >
+                  {busy ? "Deleting…" : "Delete team"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {/* Team */}
+      <Card className="glass border-none">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg text-slate-900">Team</CardTitle>
+          <CardDescription className="text-slate-500">
+            {members.length} member{members.length === 1 ? "" : "s"} · led by{" "}
+            {project.owner?.full_name ?? "—"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            {project.owner && (
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center gap-3">
+                  <Avatar u={project.owner} lead />
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{project.owner.full_name}</p>
+                    <p className="text-xs capitalize text-slate-500">Team Lead · {project.owner.role}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {members
+              .filter((m) => m.id !== project.owner_id)
+              .map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar u={m} />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{m.full_name ?? m.email}</p>
+                      <p className="text-xs capitalize text-slate-500">{m.role} · {m.department ?? "—"}</p>
+                    </div>
+                  </div>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleRemove(m.id)}
+                      disabled={busy}
+                      aria-label={`Remove ${m.full_name ?? m.email}`}
+                      className="h-7 w-7 p-0 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            {members.filter((m) => m.id !== project.owner_id).length === 0 && (
+              <p className="text-sm text-slate-400">No team members yet.</p>
+            )}
+          </div>
+
+          {canManage && (
+            <div className="flex items-center gap-2 pt-1">
+              <select
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+                aria-label="Select a user to add"
+                className="h-9 flex-1 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+              >
+                <option value="">Add a team member…</option>
+                {addable.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name ?? u.email} ({u.role})
+                  </option>
+                ))}
+              </select>
+              <Button
+                onClick={handleAdd}
+                disabled={busy || !selected}
+                className="gap-2 bg-primary text-white hover:bg-primary/90 cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4" /> Add
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Reviews for this project */}
+      <Card className="glass border-none">
+        <CardHeader className="border-b border-slate-100 pb-3">
+          <CardTitle className="text-lg text-slate-900">Team Reviews</CardTitle>
+          <CardDescription className="text-slate-500">
+            Work submitted under this project.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {reviews.length === 0 ? (
+            <div className="p-6 text-sm text-slate-400">No reviews for this project yet.</div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {reviews.map((r) => (
+                <Link
+                  key={r.id}
+                  href={`/dashboard/reviews/${r.id}`}
+                  className="flex items-center justify-between p-4 transition-colors hover:bg-slate-50 group cursor-pointer"
+                >
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-900">{r.title}</span>
+                      <Badge className={`border-none ${reviewStatusStyles[r.status] ?? ""}`}>
+                        {r.status.replace("_", " ")}
+                      </Badge>
+                    </div>
+                    <span className="text-sm text-slate-500">
+                      {r.submitter?.full_name ?? "Unknown"}
+                    </span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500" />
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
