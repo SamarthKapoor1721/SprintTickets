@@ -36,6 +36,8 @@ import {
   X,
   ExternalLink,
   FileText,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react"
 import {
   getConversation,
@@ -168,6 +170,7 @@ export default function MessagesPage() {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -274,6 +277,12 @@ export default function MessagesPage() {
     }
   }
 
+  // Select a contact; on mobile, collapse the drawer so the thread shows
+  const selectContact = (u: User) => {
+    setActive(u)
+    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false)
+  }
+
   const toggleProject = (id: number) =>
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -293,12 +302,35 @@ export default function MessagesPage() {
   const dmOnly = contacts.filter((c) => !inProjectIds.has(c.user.id))
 
   return (
-    <div className="-m-[26px] flex overflow-hidden" style={{ height: "calc(100vh - 4rem)" }}>
+    <div className="relative -m-[26px] flex overflow-hidden" style={{ height: "calc(100vh - 4rem)" }}>
+
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <button
+          aria-label="Close sidebar"
+          onClick={() => setSidebarOpen(false)}
+          className="absolute inset-0 z-30 bg-slate-900/30 md:hidden"
+        />
+      )}
 
       {/* ── Left: GitHub-style project nav ── */}
-      <aside className="flex w-[252px] flex-shrink-0 flex-col border-r border-[#eef2f7] bg-white">
-        <div className="border-b border-[#eef2f7] px-4 py-3.5">
+      <aside
+        className={`absolute inset-y-0 left-0 z-40 flex w-[252px] flex-shrink-0 flex-col border-r border-[#eef2f7] bg-white transition-all duration-200 md:relative ${
+          sidebarOpen
+            ? "translate-x-0 md:w-[252px]"
+            : "-translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden md:border-0"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3.5">
           <span className="text-[13.5px] font-semibold text-slate-800">Messages</span>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-slate-400 transition-colors hover:bg-[#f4f7fb] hover:text-slate-700 cursor-pointer"
+          >
+            <PanelLeftClose className="h-4 w-4" strokeWidth={1.8} />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-2">
@@ -337,7 +369,7 @@ export default function MessagesPage() {
                                 return (
                                   <button
                                     key={c.user.id}
-                                    onClick={() => setActive(c.user)}
+                                    onClick={() => selectContact(c.user)}
                                     className={`flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 text-left transition-colors cursor-pointer ${
                                       isActive ? "bg-[#eef4ff] text-primary" : "text-slate-600 hover:bg-[#f4f7fb]"
                                     }`}
@@ -378,7 +410,7 @@ export default function MessagesPage() {
                     return (
                       <button
                         key={c.user.id}
-                        onClick={() => setActive(c.user)}
+                        onClick={() => selectContact(c.user)}
                         className={`flex w-full items-center gap-2 rounded-[7px] px-3 py-1.5 text-left transition-colors cursor-pointer ${
                           isActive ? "bg-[#eef4ff] text-primary" : "text-slate-600 hover:bg-[#f4f7fb]"
                         }`}
@@ -412,16 +444,40 @@ export default function MessagesPage() {
       {/* ── Right: thread ── */}
       <div className="flex flex-1 flex-col bg-[#f8fafc]">
         {!active ? (
-          <div className="flex flex-1 items-center justify-center">
-            <div className="text-center">
-              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-slate-200" strokeWidth={1.4} />
-              <p className="text-sm text-slate-400">Select a conversation to start messaging</p>
+          <div className="flex flex-1 flex-col">
+            {!sidebarOpen && (
+              <div className="border-b border-[#eef2f7] bg-white px-3 py-3">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Open sidebar"
+                  title="Open conversations"
+                  className="flex h-9 w-9 items-center justify-center rounded-[9px] border border-[#eef2f7] text-slate-500 transition-colors hover:bg-[#f4f7fb] hover:text-slate-700 cursor-pointer"
+                >
+                  <PanelLeft className="h-4 w-4" strokeWidth={1.8} />
+                </button>
+              </div>
+            )}
+            <div className="flex flex-1 items-center justify-center">
+              <div className="text-center">
+                <MessageSquare className="mx-auto mb-3 h-10 w-10 text-slate-200" strokeWidth={1.4} />
+                <p className="text-sm text-slate-400">Select a conversation to start messaging</p>
+              </div>
             </div>
           </div>
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center gap-3 border-b border-[#eef2f7] bg-white px-5 py-3">
+            <div className="flex items-center gap-3 border-b border-[#eef2f7] bg-white px-3 py-3 sm:px-5">
+              {!sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Open sidebar"
+                  title="Open conversations"
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[9px] border border-[#eef2f7] text-slate-500 transition-colors hover:bg-[#f4f7fb] hover:text-slate-700 cursor-pointer"
+                >
+                  <PanelLeft className="h-4 w-4" strokeWidth={1.8} />
+                </button>
+              )}
               <div
                 className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                 style={{ background: avatarBg(active.id) }}

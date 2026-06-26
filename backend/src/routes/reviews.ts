@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Prisma, UserRole } from "@prisma/client";
+import { cacheGet, cacheSet, cacheInvalidate } from "../lib/cache";
 import { z } from "zod";
 
 import { prisma } from "../lib/prisma";
@@ -72,6 +73,14 @@ reviewsRouter.get(
       throw unauthorized();
     }
 
+    const qs = new URLSearchParams(req.query as Record<string, string>).toString();
+    const cacheKey = `reviews:list:${req.authUser.id}:${qs}`;
+    const cached = await cacheGet<unknown[]>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
     const whereBase: any = {};
     if (status) {
       whereBase.status = status;
@@ -99,7 +108,9 @@ reviewsRouter.get(
       },
     });
 
-    res.json(reviews.map(serializeReview));
+    const result = reviews.map(serializeReview);
+    await cacheSet(cacheKey, result, 30);
+    res.json(result);
   }),
 );
 
@@ -141,6 +152,7 @@ reviewsRouter.post(
       },
     });
 
+    await cacheInvalidate("reviews:list:*");
     res.status(201).json(serializeReview(review));
   }),
 );
@@ -218,6 +230,7 @@ reviewsRouter.patch(
       },
     });
 
+    await cacheInvalidate("reviews:list:*");
     res.json(serializeReview(updated));
   }),
 );

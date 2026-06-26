@@ -2,339 +2,408 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import {
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  FileText,
-  FolderKanban,
-  ListTodo,
-  ShieldAlert,
-  Users,
-} from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { getDashboardSummary, type DashboardSummary, type Task, type TaskStatus } from "@/lib/api"
+import { ChevronRight, RefreshCw, Sparkles, X } from "lucide-react"
+import { getAISummary, listReviews, listProjects, type Review, type Project } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 
-const statusLabels: Record<TaskStatus, string> = {
-  backlog: "Backlog",
-  todo: "To do",
-  in_progress: "In progress",
-  in_review: "In review",
-  blocked: "Blocked",
-  done: "Done",
+// ── Style helpers ────────────────────────────────────────────────
+const STATUS_INFO: Record<string, { label: string; color: string; bg: string }> = {
+  pending:       { label: "Pending",   color: "#b45309", bg: "#fef6e7" },
+  approved:      { label: "Approved",  color: "#15803d", bg: "#ecfdf3" },
+  needs_changes: { label: "Changes",   color: "#7c3aed", bg: "#f5f3ff" },
+  rejected:      { label: "Rejected",  color: "#dc2626", bg: "#fef2f2" },
 }
 
-const statusStyles: Record<TaskStatus, string> = {
-  backlog: "bg-slate-100 text-slate-600",
-  todo: "bg-slate-100 text-slate-600",
-  in_progress: "bg-blue-100 text-blue-700",
-  in_review: "bg-indigo-100 text-indigo-700",
-  blocked: "bg-red-100 text-red-700",
-  done: "bg-emerald-100 text-emerald-700",
+const PALETTE = ["#2563eb", "#0d9488", "#7c3aed", "#db2777", "#ea580c", "#0891b2"]
+function avatarColor(id: number) { return PALETTE[id % PALETTE.length] }
+
+function initials(name?: string | null) {
+  if (!name) return "?"
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?"
 }
 
-const priorityStyles = {
-  critical: "bg-red-100 text-red-700",
-  high: "bg-orange-100 text-orange-700",
-  medium: "bg-blue-100 text-blue-700",
-  low: "bg-slate-100 text-slate-600",
+function ticketId(id: number) { return `R-${String(id).padStart(3, "0")}` }
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return ""
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.round(diff / 60000)
+  if (mins < 2) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.round(hrs / 24)}d ago`
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "No due date"
-  return new Date(value).toLocaleDateString([], { month: "short", day: "numeric" })
+function greetingWord() {
+  const h = new Date().getHours()
+  if (h < 12) return "Good morning"
+  if (h < 17) return "Good afternoon"
+  return "Good evening"
 }
 
+// ── Page ─────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const router = useRouter()
   const { user } = useAuth()
   const role = user?.role ?? "employee"
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
+  const canSummarize = role === "ceo" || role === "super_admin" || role === "manager"
+  const [aiText, setAiText] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null)
+  const [aiDismissed, setAiDismissed] = useState(false)
+
+  const fetchSummary = async (force = false) => {
+    if (aiText && !force) return
+    setAiLoading(true)
+    setAiError(null)
+    setAiDismissed(false)
+    try {
+      const result = await getAISummary()
+      setAiText(result.summary)
+      setAiGeneratedAt(result.generated_at)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Failed to generate summary")
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   useEffect(() => {
-    getDashboardSummary()
-      .then(setSummary)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load dashboard"))
+    Promise.all([listReviews(), listProjects()])
+      .then(([r, p]) => { setReviews(r); setProjects(p) })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  const title = {
-    super_admin: "Company work control",
-    ceo: "CEO work control",
-    manager: "Team delivery control",
-    employee: "My work today",
-  }[role]
+  const firstName = (user?.full_name ?? user?.email ?? "there").split(/[\s@]/)[0]
 
-  const description = {
-    super_admin: "Global delivery visibility across teams, blockers, reports, and sprints.",
-    ceo: "Company-wide work health, blocked items, overdue tasks, and daily report coverage.",
-    manager: "Owned team progress, sprint health, blockers, and update completion.",
-    employee: "Assigned tasks, due work, blockers, and your daily update status.",
-  }[role]
+  const greetSub = {
+    super_admin: "Company-wide review activity, all in one place.",
+    ceo:         "Company-wide review activity, all in one place.",
+    manager:     "Reviews across the teams you lead.",
+    employee:    "Your submissions and what needs your input.",
+  }[role] ?? "Here's what needs your attention today."
 
-  const completion = useMemo(() => {
-    if (!summary || summary.metrics.total_tasks === 0) return 0
-    return Math.round(((summary.tasks_by_status.done ?? 0) / summary.metrics.total_tasks) * 100)
-  }, [summary])
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
 
-  if (loading) return <div className="text-sm text-slate-500">Loading dashboard...</div>
+  const pending          = reviews.filter(r => r.status === "pending")
+  const urgent           = pending.filter(r => r.priority === "high" || r.priority === "critical")
+  const approvedThisWeek = reviews.filter(r => r.status === "approved" && r.updated_at && new Date(r.updated_at).getTime() > weekAgo)
 
-  if (error || !summary) {
+  const avgReviewLabel = useMemo(() => {
+    const resolved = reviews.filter(r => (r.status === "approved" || r.status === "rejected") && r.created_at && r.updated_at)
+    if (!resolved.length) return "—"
+    const avg = resolved.reduce((sum, r) => sum + (new Date(r.updated_at!).getTime() - new Date(r.created_at!).getTime()), 0) / resolved.length
+    const hrs = avg / 3_600_000
+    return hrs < 24 ? `${hrs.toFixed(1)}h` : `${(hrs / 24).toFixed(1)}d`
+  }, [reviews])
+
+  const metrics = [
+    {
+      label: "Pending reviews", value: String(pending.length),
+      icon: "◷", iconBg: "#fef6e7", iconColor: "#b45309",
+      delta: pending.length > 0 ? `${pending.length} need attention` : "All clear",
+      deltaColor: pending.length > 0 ? "#b45309" : "#15803d",
+    },
+    {
+      label: "Urgent", value: String(urgent.length),
+      icon: "!", iconBg: "#fef2f2", iconColor: "#dc2626",
+      delta: urgent.length > 0 ? "High priority items" : "None right now",
+      deltaColor: urgent.length > 0 ? "#dc2626" : "#15803d",
+    },
+    {
+      label: "Approved this week", value: String(approvedThisWeek.length),
+      icon: "✓", iconBg: "#ecfdf3", iconColor: "#15803d",
+      delta: approvedThisWeek.length > 0 ? `+${approvedThisWeek.length} this week` : "No approvals yet",
+      deltaColor: "#15803d",
+    },
+    {
+      label: "Avg. review time", value: avgReviewLabel,
+      icon: "⚡", iconBg: "#eff4ff", iconColor: "#2563eb",
+      delta: avgReviewLabel === "—" ? "No resolved reviews" : "Based on resolved",
+      deltaColor: "#2563eb",
+    },
+  ]
+
+  // Queue: employee sees own submissions, others see pending queue
+  const queue = role === "employee"
+    ? reviews.filter(r => r.submitter_id === user?.id).slice(0, 5)
+    : pending.slice(0, 5)
+
+  const queueTitle = role === "employee" ? "Your submissions" : "Awaiting your review"
+
+  // Teams mini: top 4 projects with open review count
+  const teamMini = projects.slice(0, 4).map((p, idx) => {
+    const color = PALETTE[idx % PALETTE.length]
+    const abbr = p.name.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?"
+    const openCount = reviews.filter(r => r.project_id === p.id && r.status === "pending").length
+    return { ...p, color, abbr, openCount }
+  })
+
+  // Activity feed from review events
+  const activity = useMemo(() => {
+    const sorted = [...reviews].sort((a, b) =>
+      new Date(b.updated_at ?? b.created_at ?? 0).getTime() - new Date(a.updated_at ?? a.created_at ?? 0).getTime()
+    )
+    return sorted.slice(0, 5).map(r => {
+      if (r.status === "approved")
+        return { dot: "#16a34a", who: r.reviewer?.full_name ?? "CEO", text: `approved "${r.title}"`, time: timeAgo(r.updated_at) }
+      if (r.status === "needs_changes")
+        return { dot: "#7c3aed", who: r.reviewer?.full_name ?? "CEO", text: `requested changes on "${r.title}"`, time: timeAgo(r.updated_at) }
+      if (r.status === "rejected")
+        return { dot: "#dc2626", who: r.reviewer?.full_name ?? "CEO", text: `rejected "${r.title}"`, time: timeAgo(r.updated_at) }
+      return { dot: "#2563eb", who: r.submitter?.full_name ?? "Someone", text: `submitted "${r.title}" for review`, time: timeAgo(r.created_at) }
+    })
+  }, [reviews])
+
+  if (loading) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-        {error ?? "Dashboard unavailable"}
+      <div className="flex items-center gap-2 text-[13px] text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        Loading dashboard…
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{title}</h1>
-          <p className="text-slate-500">{description}</p>
+    <motion.div initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+
+      {/* Greeting */}
+      <div className="mb-[18px] flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
+            {greetingWord()}, {firstName}
+          </h1>
+          <p className="mt-0.5 text-[14px] text-slate-400">{greetSub}</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/dashboard/tasks">
-            <Button className="gap-2 bg-primary text-white hover:bg-primary/90 cursor-pointer">
-              <ListTodo className="h-4 w-4" />
-              Open board
-            </Button>
-          </Link>
-          <Link href="/dashboard/reports">
-            <Button variant="outline" className="gap-2 border-slate-200 bg-white cursor-pointer">
-              <FileText className="h-4 w-4" />
-              Daily updates
-            </Button>
-          </Link>
-        </div>
+        {canSummarize && (!aiText || aiDismissed) && !aiLoading && (
+          <button
+            onClick={() => { setAiDismissed(false); fetchSummary(true) }}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            AI Summary
+          </button>
+        )}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Projects" value={summary.metrics.projects} icon={FolderKanban} />
-        <Metric label="Total tasks" value={summary.metrics.total_tasks} icon={ListTodo} />
-        <Metric label="Blocked" value={summary.metrics.blocked_tasks} icon={ShieldAlert} tone="red" />
-        <Metric label="Missing updates" value={summary.metrics.missing_reports} icon={Users} tone="amber" />
+      {/* AI Summary panel */}
+      {canSummarize && !aiDismissed && (aiText || aiLoading || aiError) && (
+        <div className="mb-[18px] rounded-[14px] border border-violet-200 bg-violet-50 px-5 py-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-violet-600" />
+              <span className="text-[13.5px] font-semibold text-violet-900">AI Executive Summary</span>
+              {aiGeneratedAt && (
+                <span className="text-[11px] text-violet-400">
+                  · Generated at {new Date(aiGeneratedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {aiText && (
+                <button
+                  onClick={() => fetchSummary(true)}
+                  title="Regenerate"
+                  className="flex h-7 w-7 items-center justify-center rounded-[7px] text-violet-400 transition-colors hover:bg-violet-100 hover:text-violet-700 cursor-pointer"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                onClick={() => setAiDismissed(true)}
+                className="flex h-7 w-7 items-center justify-center rounded-[7px] text-violet-400 transition-colors hover:bg-violet-100 hover:text-violet-700 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {aiLoading ? (
+            <div className="flex items-center gap-2 py-2 text-[13px] text-violet-600">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+              Analysing reviews, reports, and tasks…
+            </div>
+          ) : aiError ? (
+            <p className="text-[13px] text-red-600">{aiError}</p>
+          ) : (
+            <div className="space-y-0.5">
+              {aiText?.split("\n").map((line, i) => {
+                const html = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                if (/^#{1,3} /.test(line))
+                  return <p key={i} className="mt-2 text-[13px] font-semibold text-violet-900" dangerouslySetInnerHTML={{ __html: html.replace(/^#{1,3} /, "") }} />
+                if (/^[-*] /.test(line))
+                  return <p key={i} className="ml-3 text-[12.5px] leading-relaxed text-slate-700" dangerouslySetInnerHTML={{ __html: `• ${html.slice(2)}` }} />
+                if (!line.trim()) return <div key={i} className="h-1" />
+                return <p key={i} className="text-[12.5px] leading-relaxed text-slate-700" dangerouslySetInnerHTML={{ __html: html }} />
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4 Metric cards */}
+      <div className="mb-[18px] grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {metrics.map((m, i) => (
+          <div
+            key={i}
+            className="rounded-[14px] border border-[#eef2f7] bg-white px-[18px] py-[17px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-slate-500">{m.label}</span>
+              <div
+                className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-[15px]"
+                style={{ background: m.iconBg, color: m.iconColor }}
+              >
+                {m.icon}
+              </div>
+            </div>
+            <div className="mt-3 text-[28px] font-semibold leading-none tracking-tight text-slate-900">
+              {m.value}
+            </div>
+            <div className="mt-1 text-[12px] font-medium" style={{ color: m.deltaColor }}>
+              {m.delta}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <Card className="glass border-none">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg text-slate-900">Work distribution</CardTitle>
-            <CardDescription className="text-slate-500">
-              {completion}% complete across visible tasks.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-4">
-            {(Object.keys(statusLabels) as TaskStatus[]).map((status) => {
-              const count = summary.tasks_by_status[status] ?? 0
-              const width = summary.metrics.total_tasks > 0 ? Math.max(4, (count / summary.metrics.total_tasks) * 100) : 0
+      {/* Queue + Right column */}
+      <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[1.7fr_1fr]">
+
+        {/* Review queue */}
+        <div className="overflow-hidden rounded-[14px] border border-[#eef2f7] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="flex items-center justify-between border-b border-[#f1f5f9] px-[18px] py-4">
+            <span className="text-[14.5px] font-semibold text-slate-900">{queueTitle}</span>
+            <Link
+              href="/dashboard/reviews/pending"
+              className="text-[12.5px] font-semibold text-primary hover:underline"
+            >
+              View all
+            </Link>
+          </div>
+
+          {queue.length === 0 ? (
+            <div className="px-[18px] py-6 text-[13px] text-slate-400">No reviews right now.</div>
+          ) : (
+            queue.map((r) => {
+              const st = STATUS_INFO[r.status] ?? STATUS_INFO.pending
               return (
-                <div key={status} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-slate-700">{statusLabels[status]}</span>
-                    <span className="text-slate-400">{count}</span>
+                <div
+                  key={r.id}
+                  onClick={() => router.push(`/dashboard/reviews/${r.id}`)}
+                  className="flex cursor-pointer items-center gap-[14px] border-b border-[#f5f8fb] px-[18px] py-[14px] transition-colors last:border-0 hover:bg-[#fafbfd]"
+                >
+                  <div
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold text-white"
+                    style={{ background: avatarColor(r.submitter_id ?? r.id) }}
+                  >
+                    {initials(r.submitter?.full_name)}
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: `${width}%` }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[11.5px] font-medium text-slate-400">{ticketId(r.id)}</span>
+                      {(r.priority === "high" || r.priority === "critical") && (
+                        <span className="rounded-[5px] bg-[#fef2f2] px-1.5 py-px text-[10.5px] font-semibold text-red-600">
+                          Urgent
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-[14px] font-medium text-slate-800">{r.title}</div>
+                    <div className="mt-0.5 text-[12px] text-slate-400">
+                      {r.submitter?.full_name ?? "Unknown"} · {timeAgo(r.created_at)}
+                    </div>
                   </div>
+                  <span
+                    className="flex-shrink-0 rounded-full px-[10px] py-1 text-[11.5px] font-semibold"
+                    style={{ color: st.color, background: st.bg }}
+                  >
+                    {st.label}
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-300" strokeWidth={2} />
                 </div>
               )
-            })}
-          </CardContent>
-        </Card>
+            })
+          )}
+        </div>
 
-        <Card className="glass border-none">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg text-slate-900">Sprint pulse</CardTitle>
-            <CardDescription className="text-slate-500">
-              {summary.metrics.active_sprints} active sprint{summary.metrics.active_sprints === 1 ? "" : "s"}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-4">
-            {summary.active_sprints.length === 0 ? (
-              <p className="text-sm text-slate-400">No active sprints.</p>
+        {/* Right column: teams + activity */}
+        <div className="flex flex-col gap-[18px]">
+
+          {/* Teams mini */}
+          <div className="overflow-hidden rounded-[14px] border border-[#eef2f7] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <div className="flex items-center justify-between border-b border-[#f1f5f9] px-[18px] py-[15px]">
+              <span className="text-[14px] font-semibold text-slate-900">Your teams</span>
+              <Link href="/dashboard/projects" className="text-[12.5px] font-semibold text-primary hover:underline">
+                All teams
+              </Link>
+            </div>
+            {teamMini.length === 0 ? (
+              <div className="px-[18px] py-4 text-[13px] text-slate-400">No teams yet.</div>
             ) : (
-              summary.active_sprints.slice(0, 4).map((sprint) => (
-                <Link key={sprint.id} href={`/dashboard/projects/${sprint.project_id}`} className="block rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 transition hover:bg-white">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-slate-900">{sprint.name}</span>
-                    <Badge className="border-none bg-emerald-100 text-emerald-700">{sprint.task_count} tasks</Badge>
+              teamMini.map((t) => (
+                <Link
+                  key={t.id}
+                  href="/dashboard/projects"
+                  className="flex items-center gap-[11px] border-b border-[#f5f8fb] px-[18px] py-3 transition-colors last:border-0 hover:bg-[#fafbfd]"
+                >
+                  <div
+                    className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-[8px] text-[12px] font-bold"
+                    style={{ background: t.color + "1a", color: t.color }}
+                  >
+                    {t.abbr}
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">{sprint.project?.name ?? `Project #${sprint.project_id}`}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13.5px] font-medium text-slate-800">{t.name}</div>
+                    <div className="text-[11.5px] text-slate-400">{t.members.length} members</div>
+                  </div>
+                  <span className="flex-shrink-0 rounded-full bg-[#fef6e7] px-2 py-0.5 text-[11.5px] font-semibold text-amber-700">
+                    {t.openCount} open
+                  </span>
                 </Link>
               ))
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <TaskList title="Blocked work" description="Items that need attention." tasks={summary.blocked_tasks} empty="No blocked tasks." />
-        <TaskList title="Overdue work" description="Visible tasks past due and not done." tasks={summary.overdue_tasks} empty="No overdue work." />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Card className="glass border-none">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg text-slate-900">Recent work</CardTitle>
-            <CardDescription className="text-slate-500">Latest visible task activity.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {summary.recent_tasks.length === 0 ? (
-              <Empty text="No recent tasks." />
+          {/* Recent activity */}
+          <div className="rounded-[14px] border border-[#eef2f7] bg-white px-[18px] py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <div className="mb-[14px] text-[14px] font-semibold text-slate-900">Recent activity</div>
+            {activity.length === 0 ? (
+              <p className="text-[13px] text-slate-400">No recent activity.</p>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {summary.recent_tasks.map((task) => <TaskRow key={task.id} task={task} />)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="glass border-none">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg text-slate-900">Daily update coverage</CardTitle>
-            <CardDescription className="text-slate-500">
-              {summary.metrics.reports_today} submitted today.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-4">
-            {summary.missing_reports.length === 0 ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                <CheckCircle2 className="h-4 w-4" />
-                All expected updates are in.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {summary.missing_reports.slice(0, 6).map((person) => (
-                  <div key={person.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
-                    <span className="font-medium text-slate-700">{person.full_name ?? person.email}</span>
-                    <Badge className="border-none bg-amber-100 text-amber-700">missing</Badge>
+              <div>
+                {activity.map((a, i) => (
+                  <div key={i} className="flex gap-[11px] pb-[14px] last:pb-0">
+                    <div className="flex flex-shrink-0 flex-col items-center">
+                      <div className="mt-[5px] h-2 w-2 rounded-full" style={{ background: a.dot }} />
+                      {i < activity.length - 1 && (
+                        <div className="mt-1 w-px flex-1 bg-[#eef2f7]" />
+                      )}
+                    </div>
+                    <div className="min-w-0 pb-0.5">
+                      <div className="text-[13px] leading-[1.45] text-slate-500">
+                        <span className="font-semibold text-slate-800">{a.who}</span>{" "}
+                        <span className="line-clamp-2">{a.text}</span>
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-slate-400">{a.time}</div>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="space-y-2">
-              {summary.recent_reports.slice(0, 3).map((report) => (
-                <Link key={report.id} href="/dashboard/reports" className="block rounded-xl border border-slate-100 px-3 py-2 transition hover:bg-slate-50">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-slate-800">{report.submitter?.full_name ?? report.submitter?.email ?? "Unknown"}</span>
-                    <span className="text-xs text-slate-400">{new Date(report.date).toLocaleDateString()}</span>
-                  </div>
-                  {report.pointers.executive.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {report.pointers.executive.slice(0, 2).map((pointer) => (
-                        <Badge key={pointer} className="border-none bg-slate-100 text-slate-600">
-                          {pointer}
-                        </Badge>
-                      ))}
-                      {report.attachments.length > 0 && (
-                        <Badge className="border-none bg-indigo-100 text-indigo-700">{report.attachments.length} files</Badge>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{report.today ?? report.content}</p>
-                  )}
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-function Metric({
-  label,
-  value,
-  icon: Icon,
-  tone = "blue",
-}: {
-  label: string
-  value: number
-  icon: typeof FolderKanban
-  tone?: "blue" | "red" | "amber"
-}) {
-  const tones = {
-    blue: "bg-blue-50 text-blue-700",
-    red: "bg-red-50 text-red-700",
-    amber: "bg-amber-50 text-amber-700",
-  }
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="glass border-none">
-        <CardContent className="flex items-center justify-between gap-4 py-5">
-          <div>
-            <p className="text-sm font-medium text-slate-500">{label}</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
           </div>
-          <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${tones[tone]}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  )
-}
-
-function TaskList({ title, description, tasks, empty }: { title: string; description: string; tasks: Task[]; empty: string }) {
-  return (
-    <Card className="glass border-none">
-      <CardHeader className="border-b border-slate-100 pb-4">
-        <CardTitle className="text-lg text-slate-900">{title}</CardTitle>
-        <CardDescription className="text-slate-500">{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
-        {tasks.length === 0 ? (
-          <Empty text={empty} />
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {tasks.map((task) => <TaskRow key={task.id} task={task} />)}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function TaskRow({ task }: { task: Task }) {
-  return (
-    <Link href="/dashboard/tasks" className="flex items-center justify-between gap-4 p-4 transition hover:bg-slate-50">
-      <div className="min-w-0 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-medium text-slate-900">{task.title}</span>
-          <Badge className={`border-none capitalize ${statusStyles[task.status]}`}>
-            {statusLabels[task.status]}
-          </Badge>
-          <Badge className={`border-none capitalize ${priorityStyles[task.priority]}`}>
-            {task.priority}
-          </Badge>
         </div>
-        <p className="text-sm text-slate-500">
-          {task.project?.name ?? `Project #${task.project_id}`} · {task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}
-        </p>
       </div>
-      <div className="flex shrink-0 items-center gap-3 text-xs text-slate-400">
-        <span>{formatDate(task.due_date)}</span>
-        <ChevronRight className="h-4 w-4" />
-      </div>
-    </Link>
-  )
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div className="p-6 text-sm text-slate-400">
-      <div className="flex items-center gap-2">
-        <Clock className="h-4 w-4" />
-        {text}
-      </div>
-    </div>
+    </motion.div>
   )
 }

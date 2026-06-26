@@ -663,3 +663,10 @@ export async function downloadReportAttachment(reportId: number, attachment: Rep
 
 // ---- Dashboard ----
 export const getDashboardSummary = () => request<DashboardSummary>("/dashboard/summary")
+
+// ---- AI Summarizer ----
+export interface AISummary {
+  summary: string
+  generated_at: string
+}
+export const getAISummary = () => request<AISummary>("/summarize", { method: "POST" })

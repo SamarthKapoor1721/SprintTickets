@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react"
+import { TEAMS } from "@/lib/teams"
 import { motion } from "framer-motion"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -11,6 +12,7 @@ import {
   listSprints,
   listTaskComments,
   listTasks,
+  listUsers,
   updateTask,
   type Project,
   type Sprint,
@@ -115,6 +117,7 @@ export default function TasksPage() {
   const [sprintFilter, setSprintFilter] = useState("")
   const [assigneeFilter, setAssigneeFilter] = useState("")
   const [search, setSearch] = useState("")
+  const [activeStatus, setActiveStatus] = useState<TaskStatus | "all">("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -250,59 +253,121 @@ export default function TasksPage() {
       )}
 
       {loading ? (
-        <div className="text-sm text-slate-500">Loading board...</div>
-      ) : (
-        <div className="grid gap-4 xl:grid-cols-6">
-          {columns.map(({ status, label, icon: Icon }) => {
-            const columnTasks = tasks.filter((task) => task.status === status)
-            return (
-              <section key={status} className="min-h-[360px] rounded-2xl border border-slate-200 bg-slate-50/80">
-                <div className="flex h-12 items-center justify-between border-b border-slate-200 px-3">
-                  <div className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-slate-500" />
-                    <h2 className="text-sm font-semibold text-slate-800">{label}</h2>
-                  </div>
-                  <Badge className="border-none bg-white text-slate-500">{columnTasks.length}</Badge>
-                </div>
-                <div className="space-y-3 p-3">
-                  {columnTasks.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-400">
-                      No issues
-                    </div>
-                  ) : (
-                    columnTasks.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        canManage={canManage}
-                        projects={projects}
-                        sprints={sprints}
-                        onSaved={load}
-                        onStatus={updateStatus}
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
-            )
-          })}
+        <div className="flex items-center gap-2 text-[13px] text-slate-400">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Loading board…
         </div>
+      ) : (
+        <>
+          {/* Status tabs */}
+          <div className="flex flex-wrap gap-1.5">
+            <StatusTab
+              label="All"
+              count={tasks.length}
+              active={activeStatus === "all"}
+              onClick={() => setActiveStatus("all")}
+            />
+            {columns.map(({ status, label, icon: Icon }) => (
+              <StatusTab
+                key={status}
+                label={label}
+                icon={Icon}
+                count={tasks.filter((task) => task.status === status).length}
+                active={activeStatus === status}
+                onClick={() => setActiveStatus(status)}
+              />
+            ))}
+          </div>
+
+          {/* Cards grid for the active status */}
+          {(() => {
+            const visible = activeStatus === "all"
+              ? tasks
+              : tasks.filter((task) => task.status === activeStatus)
+            if (visible.length === 0) {
+              return (
+                <div className="rounded-[14px] border border-dashed border-[#e2e8f0] bg-white px-4 py-16 text-center text-[13px] text-slate-400">
+                  No issues in this category.
+                </div>
+              )
+            }
+            return (
+              <div className="flex flex-col gap-2">
+                {visible.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    canManage={canManage}
+                    projects={projects}
+                    sprints={sprints}
+                    onSaved={load}
+                    onStatus={updateStatus}
+                  />
+                ))}
+              </div>
+            )
+          })()}
+        </>
       )}
     </div>
   )
 }
 
-function Metric({ label, value, tone = "blue" }: { label: string; value: number; tone?: "blue" | "red" | "amber" | "green" }) {
-  const tones = {
-    blue: "text-blue-700 bg-blue-50",
-    red: "text-red-700 bg-red-50",
-    amber: "text-amber-700 bg-amber-50",
-    green: "text-emerald-700 bg-emerald-50",
-  }
+function StatusTab({
+  label,
+  count,
+  active,
+  icon: Icon,
+  onClick,
+}: {
+  label: string
+  count: number
+  active: boolean
+  icon?: typeof Clock3
+  onClick: () => void
+}) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">{label}</p>
-      <p className={`mt-2 w-fit rounded-xl px-3 py-1 text-2xl font-semibold ${tones[tone]}`}>{value}</p>
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-[9px] border px-3 py-1.5 text-[12.5px] font-medium transition-colors cursor-pointer ${
+        active
+          ? "border-primary bg-primary text-white"
+          : "border-[#eef2f7] bg-white text-slate-600 hover:bg-[#f4f7fb]"
+      }`}
+    >
+      {Icon && <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />}
+      {label}
+      <span
+        className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10.5px] font-semibold ${
+          active ? "bg-white/25 text-white" : "bg-[#f1f5f9] text-slate-500"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  )
+}
+
+function Metric({ label, value, tone = "blue" }: { label: string; value: number; tone?: "blue" | "red" | "amber" | "green" }) {
+  const toneConfig = {
+    blue:  { iconBg: "#eff4ff", iconColor: "#2563eb", icon: "◈" },
+    red:   { iconBg: "#fef2f2", iconColor: "#dc2626", icon: "⊗" },
+    amber: { iconBg: "#fef6e7", iconColor: "#b45309", icon: "⚠" },
+    green: { iconBg: "#ecfdf3", iconColor: "#15803d", icon: "✓" },
+  }
+  const t = toneConfig[tone]
+  return (
+    <div className="rounded-[14px] border border-[#eef2f7] bg-white px-[18px] py-[15px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-medium text-slate-500">{label}</span>
+        <div
+          className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] text-[13px]"
+          style={{ background: t.iconBg, color: t.iconColor }}
+        >
+          {t.icon}
+        </div>
+      </div>
+      <p className="mt-2.5 text-[26px] font-semibold tracking-tight text-slate-900">{value}</p>
     </div>
   )
 }
@@ -323,48 +388,59 @@ function TaskCard({
   onStatus: (task: Task, status: TaskStatus) => void
 }) {
   const overdue = task.status !== "done" && task.due_date && new Date(task.due_date) < new Date()
+
+  // The whole row is the dialog trigger; interactive controls stop propagation.
+  const row = (
+    <div
+      role="button"
+      tabIndex={0}
+      className="group flex cursor-pointer items-center gap-3 rounded-[10px] border border-[#eef2f7] bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)]"
+    >
+      {/* Title + badges + sub-meta */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={`flex-shrink-0 rounded-[5px] px-1.5 py-px text-[10.5px] font-semibold capitalize ${issueStyles[task.issue_type]}`}>
+            {task.issue_type === "bug" && <Bug className="mr-0.5 inline h-2.5 w-2.5" />}
+            {task.issue_type}
+          </span>
+          <span className={`flex-shrink-0 rounded-[5px] px-1.5 py-px text-[10.5px] font-semibold capitalize ${priorityStyles[task.priority]}`}>
+            {task.priority}
+          </span>
+          <p className="truncate text-[13px] font-medium text-slate-900">{task.title}</p>
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-[11.5px] text-slate-400">
+          <span className="truncate">{task.project?.name ?? `#${task.project_id}`}</span>
+          <span className="text-slate-300">•</span>
+          <span className="truncate">{task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}</span>
+        </div>
+      </div>
+
+      {/* Right-side meta */}
+      <span className="flex items-center gap-0.5 text-[11.5px] text-slate-400">
+        <MessageSquare className="h-3 w-3" strokeWidth={1.8} />
+        {task.comments_count}
+      </span>
+      <span className={`w-[72px] text-right text-[11.5px] ${overdue ? "font-semibold text-red-500" : "text-slate-400"}`}>
+        {formatDate(task.due_date)}
+      </span>
+
+      {/* Quick status change — does not open the dialog */}
+      <select
+        value={task.status}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { e.stopPropagation(); onStatus(task, e.target.value as TaskStatus) }}
+        className="h-7 w-[112px] flex-shrink-0 rounded-[7px] border border-[#eef2f7] bg-[#f8fafc] px-2 text-[11.5px] text-slate-600 focus:outline-none"
+      >
+        {columns.map((col) => (
+          <option key={col.status} value={col.status}>{col.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+
   return (
-    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-        <CardHeader className="space-y-3 p-3 pb-2">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-sm leading-5 text-slate-900">{task.title}</CardTitle>
-            <TaskDialog mode="edit" task={task} onSaved={onSaved} projects={projects} sprints={sprints} canManage={canManage} />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge className={`border-none capitalize ${issueStyles[task.issue_type]}`}>
-              {task.issue_type === "bug" && <Bug className="mr-1 h-3 w-3" />}
-              {task.issue_type}
-            </Badge>
-            <Badge className={`border-none capitalize ${priorityStyles[task.priority]}`}>{task.priority}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3 p-3 pt-1">
-          {task.description && <p className="line-clamp-2 text-xs leading-5 text-slate-500">{task.description}</p>}
-          <div className="space-y-1.5 text-xs text-slate-500">
-            <div className="flex items-center justify-between gap-2">
-              <span>{task.project?.name ?? `Project #${task.project_id}`}</span>
-              <span className={overdue ? "font-medium text-red-600" : ""}>{formatDate(task.due_date)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span>{task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}</span>
-              <span className="flex items-center gap-1">
-                <MessageSquare className="h-3 w-3" />
-                {task.comments_count}
-              </span>
-            </div>
-          </div>
-          <select
-            value={task.status}
-            onChange={(e) => onStatus(task, e.target.value as TaskStatus)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700"
-          >
-            {columns.map((column) => (
-              <option key={column.status} value={column.status}>{column.label}</option>
-            ))}
-          </select>
-        </CardContent>
-      </Card>
+    <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+      <TaskDialog mode="edit" task={task} onSaved={onSaved} projects={projects} sprints={sprints} canManage={canManage} trigger={row} />
     </motion.div>
   )
 }
@@ -376,6 +452,7 @@ function TaskDialog({
   sprints,
   canManage,
   onSaved,
+  trigger,
 }: {
   mode: "create" | "edit"
   task?: Task
@@ -383,6 +460,7 @@ function TaskDialog({
   sprints: Sprint[]
   canManage: boolean
   onSaved: () => void
+  trigger?: ReactElement
 }) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState(task?.title ?? "")
@@ -397,13 +475,30 @@ function TaskDialog({
   const [estimate, setEstimate] = useState(task?.estimate_minutes != null ? String(task.estimate_minutes) : "")
   const [logged, setLogged] = useState(task?.logged_minutes != null ? String(task.logged_minutes) : "0")
   const [comments, setComments] = useState<TaskComment[]>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
   const [comment, setComment] = useState("")
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const selectedProject = projects.find((project) => project.id === Number(projectId)) ?? task?.project
   const team = teamUsers(selectedProject)
+  const teamIds = new Set(team.map((member) => member.id))
+  const otherEmployees = allUsers.filter((u) => !teamIds.has(u.id))
+
+  // Group other employees by their team/department for the assignee dropdown
+  const knownDepts = new Set(TEAMS as readonly string[])
+  const otherByTeam: { label: string; members: User[] }[] = TEAMS.map((t) => ({
+    label: t,
+    members: otherEmployees.filter((u) => u.department === t),
+  })).filter((g) => g.members.length > 0)
+  const otherUncategorised = otherEmployees.filter((u) => !u.department || !knownDepts.has(u.department))
+  if (otherUncategorised.length > 0) otherByTeam.push({ label: "Other", members: otherUncategorised })
   const sprintOptions = sprints.filter((sprint) => !projectId || sprint.project_id === Number(projectId))
+
+  useEffect(() => {
+    if (!open || !canManage) return
+    listUsers().then(setAllUsers).catch(() => setAllUsers([]))
+  }, [open, canManage])
 
   useEffect(() => {
     if (!open) return
@@ -512,8 +607,11 @@ function TaskDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
+        nativeButton={!trigger}
         render={
-          mode === "create" ? (
+          trigger ? (
+            trigger
+          ) : mode === "create" ? (
             <Button className="gap-2 bg-primary text-white hover:bg-primary/90 cursor-pointer">
               <Plus className="h-4 w-4" />
               New issue
@@ -625,8 +723,19 @@ function TaskDialog({
                 <Label>Assignee</Label>
                 <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
                   <option value="">Unassigned</option>
-                  {team.map((member) => (
-                    <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
+                  {team.length > 0 && (
+                    <optgroup label="Project team">
+                      {team.map((member) => (
+                        <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {otherByTeam.map(({ label, members }) => (
+                    <optgroup key={label} label={label}>
+                      {members.map((member) => (
+                        <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>
@@ -642,7 +751,7 @@ function TaskDialog({
               </div>
               <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-500">
                 <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
-                Team members must be added to the project before they can be assigned.
+                Assigning an employee outside the project team adds them to it automatically.
               </div>
             </div>
           )}

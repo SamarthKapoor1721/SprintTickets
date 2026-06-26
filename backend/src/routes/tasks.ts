@@ -84,7 +84,10 @@ async function assertAssignable(projectId: number, assigneeId: number | null | u
     project.ownerId === assigneeId ||
     project.memberships.some((member) => member.userId === assigneeId);
   if (!belongsToTeam) {
-    throw forbidden("Assignee must belong to the project team");
+    // Auto-add the assignee to the project team so any employee can be assigned.
+    await prisma.projectMember.create({
+      data: { projectId, userId: assigneeId },
+    });
   }
 }
 

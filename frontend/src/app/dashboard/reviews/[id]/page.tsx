@@ -10,6 +10,8 @@ import {
   RotateCcw,
   ExternalLink,
   MessageSquare,
+  Sparkles,
+  X,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
   addComment,
+  getAISummary,
   getReview,
   listComments,
   updateReview,
@@ -63,8 +66,29 @@ export default function ReviewDetailPage() {
   const role = user?.role ?? "employee"
   const [newComment, setNewComment] = useState("")
   const [busy, setBusy] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiText, setAiText] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null)
 
   const canDecide = role === "ceo" || role === "manager" || role === "super_admin"
+
+  const fetchSummary = async () => {
+    setAiOpen(true)
+    if (aiText) return
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const result = await getAISummary()
+      setAiText(result.summary)
+      setAiGeneratedAt(result.generated_at)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Failed to generate summary")
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   const load = useCallback(() => {
     Promise.all([getReview(id), listComments(id)])
@@ -148,6 +172,48 @@ export default function ReviewDetailPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {canDecide && (
+        <>
+        {/* AI Summary panel */}
+        {aiOpen && (
+          <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-600" />
+                <span className="text-[13.5px] font-semibold text-violet-900">AI Executive Summary</span>
+                {aiGeneratedAt && (
+                  <span className="text-[11px] text-violet-500">
+                    · {new Date(aiGeneratedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => { setAiOpen(false); setAiText(null) }} className="rounded-lg p-1 text-violet-400 hover:bg-violet-100 hover:text-violet-700 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {aiLoading ? (
+              <div className="flex items-center gap-2 py-4 text-[13px] text-violet-600">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+                Analysing all reviews, reports, and tasks…
+              </div>
+            ) : aiError ? (
+              <p className="text-sm text-red-600">{aiError}</p>
+            ) : (
+              <div className="space-y-0.5">
+                {aiText?.split("\n").map((line, i) => {
+                  const bold = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                  if (line.startsWith("## ") || line.startsWith("# ")) {
+                    return <h3 key={i} className="mt-3 text-[13.5px] font-semibold text-violet-900" dangerouslySetInnerHTML={{ __html: bold.replace(/^#{1,3} /, "") }} />
+                  }
+                  if (line.startsWith("- ") || line.startsWith("* ")) {
+                    return <p key={i} className="ml-3 text-[13px] leading-relaxed text-slate-700" dangerouslySetInnerHTML={{ __html: `• ${bold.slice(2)}` }} />
+                  }
+                  if (!line.trim()) return <div key={i} className="h-1" />
+                  return <p key={i} className="text-[13px] leading-relaxed text-slate-700" dangerouslySetInnerHTML={{ __html: bold }} />
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <Card className="glass border-none">
           <CardContent className="flex flex-wrap items-center gap-3 py-4">
             <span className="mr-2 text-sm font-medium text-slate-600">Decision:</span>
@@ -172,8 +238,16 @@ export default function ReviewDetailPage() {
             >
               <XCircle className="h-4 w-4" /> Reject
             </Button>
+            <Button
+              onClick={fetchSummary}
+              variant="outline"
+              className="ml-auto gap-2 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4" /> AI Summary
+            </Button>
           </CardContent>
         </Card>
+        </>
       )}
 
       <Card className="glass border-none">

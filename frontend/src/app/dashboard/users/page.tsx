@@ -9,8 +9,9 @@ import {
   createUser,
   deleteUser,
   type Role,
-  type User
+  type User,
 } from "@/lib/api"
+import { TEAMS } from "@/lib/teams"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,19 +23,24 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose
+  DialogClose,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getAppBaseUrl } from "@/lib/site"
-import { Eye, Pencil, Trash2, UserPlus } from "lucide-react"
+import { Eye, Pencil, Trash2, UserPlus, Users } from "lucide-react"
+
+const ROLE_COLORS: Record<string, string> = {
+  ceo: "bg-blue-100 text-blue-700",
+  manager: "bg-violet-100 text-violet-700",
+  employee: "bg-slate-100 text-slate-600",
+  super_admin: "bg-amber-100 text-amber-700",
+}
 
 export default function UsersPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
-  
-  // Only super_admin, ceo, manager can view users (per backend).
-  // Only super_admin, ceo can create/delete.
+
   const canManage = role === "ceo" || role === "super_admin"
   const canOpenProfiles = canManage
 
@@ -51,9 +57,7 @@ export default function UsersPage() {
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      load()
-    }, 0)
+    const timer = setTimeout(load, 0)
     return () => clearTimeout(timer)
   }, [load])
 
@@ -67,10 +71,19 @@ export default function UsersPage() {
     }
   }
 
-  // Hide page if employee
   if (role === "employee") {
     return <div className="text-sm text-slate-500">You do not have access to view users.</div>
   }
+
+  // Group users: known teams first (in order), then "Other" for anyone with a non-standard or null dept
+  const grouped: { label: string; members: User[] }[] = TEAMS.map((team) => ({
+    label: team,
+    members: users.filter((u) => u.department === team),
+  })).filter((g) => g.members.length > 0)
+
+  const knownDepts = new Set(TEAMS as readonly string[])
+  const others = users.filter((u) => !u.department || !knownDepts.has(u.department))
+  if (others.length > 0) grouped.push({ label: "Other", members: others })
 
   return (
     <div className="flex flex-col gap-8">
@@ -88,72 +101,102 @@ export default function UsersPage() {
         </div>
       ) : loading ? (
         <div className="text-sm text-slate-500">Loading users…</div>
+      ) : users.length === 0 ? (
+        <div className="text-sm text-slate-500">No users found.</div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {users.map((u) => {
-            const canDelete = (role === "super_admin" && u.id !== user?.id) || 
-                              (role === "ceo" && (u.role === "manager" || u.role === "employee") && u.id !== user?.id)
-            return (
-              <motion.div key={u.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-base text-slate-900">
-                        {u.full_name ?? "Unnamed"}
-                      </CardTitle>
-                      <Badge className="border-none capitalize bg-slate-100 text-slate-700">
-                        {u.role.replace("_", " ")}
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-slate-500">
-                      {u.email} · Employee #{u.employee_id}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="mt-auto space-y-3 pt-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-slate-400">{u.department ?? "No department"}</span>
-                      {canOpenProfiles && (
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/dashboard/users/${u.id}`}
-                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            View
-                          </Link>
-                          <Link
-                            href={`/dashboard/users/${u.id}?edit=1`}
-                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Edit
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                    {canDelete && (
-                      <div className="flex justify-end">
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(u.id)} className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )
-          })}
+        <div className="flex flex-col gap-8">
+          {grouped.map(({ label, members }) => (
+            <section key={label}>
+              {/* Team header */}
+              <div className="mb-3 flex items-center gap-2">
+                <Users className="h-4 w-4 text-slate-400" strokeWidth={1.8} />
+                <h2 className="text-[14px] font-semibold text-slate-800">{label}</h2>
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f1f5f9] px-1.5 text-[11px] font-semibold text-slate-500">
+                  {members.length}
+                </span>
+                <div className="h-px flex-1 bg-[#eef2f7]" />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {members.map((u) => {
+                  const canDelete =
+                    (role === "super_admin" && u.id !== user?.id) ||
+                    (role === "ceo" &&
+                      (u.role === "manager" || u.role === "employee") &&
+                      u.id !== user?.id)
+                  return (
+                    <motion.div key={u.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                      <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <CardTitle className="text-base text-slate-900">
+                              {u.full_name ?? "Unnamed"}
+                            </CardTitle>
+                            <Badge
+                              className={`border-none capitalize ${ROLE_COLORS[u.role] ?? "bg-slate-100 text-slate-600"}`}
+                            >
+                              {u.role.replace("_", " ")}
+                            </Badge>
+                          </div>
+                          <CardDescription className="text-slate-500">
+                            {u.email} · #{u.employee_id}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="mt-auto space-y-3 pt-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-slate-400">
+                              {u.department ?? "No team"}
+                            </span>
+                            {canOpenProfiles && (
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/dashboard/users/${u.id}`}
+                                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  View
+                                </Link>
+                                <Link
+                                  href={`/dashboard/users/${u.id}?edit=1`}
+                                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  Edit
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                          {canDelete && (
+                            <div className="flex justify-end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(u.id)}
+                                className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-function UserDialog({ 
+function UserDialog({
   onSaved,
-  currentRole
-}: { 
-  onSaved: () => void,
+  currentRole,
+}: {
+  onSaved: () => void
   currentRole: Role
 }) {
   const [open, setOpen] = useState(false)
@@ -161,7 +204,6 @@ function UserDialog({
   const [fullName, setFullName] = useState("")
   const [department, setDepartment] = useState("")
   const [role, setRole] = useState<Role>("employee")
-  
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [magicLink, setMagicLink] = useState<string | null>(null)
@@ -174,16 +216,10 @@ function UserDialog({
     setBusy(true)
     setErr(null)
     try {
-      const newUser = await createUser({
-        email,
-        full_name: fullName,
-        department,
-        role
-      })
+      const newUser = await createUser({ email, full_name: fullName, department, role })
       const link = new URL("/auth/onboard", getAppBaseUrl())
       link.searchParams.set("token", newUser.onboardingToken)
-      const magicUrl = link.toString()
-      setMagicLink(magicUrl)
+      setMagicLink(link.toString())
       setEmail("")
       setFullName("")
       setDepartment("")
@@ -198,7 +234,7 @@ function UserDialog({
 
   if (magicLink) {
     return (
-      <Dialog open={true} onOpenChange={(val) => { if (!val) { setMagicLink(null); setOpen(false); }}}>
+      <Dialog open={true} onOpenChange={(val) => { if (!val) { setMagicLink(null); setOpen(false) } }}>
         <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
           <DialogHeader>
             <DialogTitle>User Created!</DialogTitle>
@@ -206,7 +242,7 @@ function UserDialog({
               Share this magic link with the user so they can activate their account and set their password.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-2">
+          <div className="space-y-2 py-4">
             <Label>Magic Link</Label>
             <div className="flex gap-2">
               <Input readOnly value={magicLink} className="bg-slate-50" />
@@ -216,7 +252,7 @@ function UserDialog({
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => { setMagicLink(null); setOpen(false); }} className="bg-primary text-white cursor-pointer">
+            <Button onClick={() => { setMagicLink(null); setOpen(false) }} className="bg-primary text-white cursor-pointer">
               Done
             </Button>
           </DialogFooter>
@@ -237,9 +273,7 @@ function UserDialog({
       <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create User</DialogTitle>
-          <DialogDescription>
-            Add a new manager or employee to the workspace.
-          </DialogDescription>
+          <DialogDescription>Add a new member to the workspace.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
@@ -263,13 +297,17 @@ function UserDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-slate-700">Department</Label>
-              <Input
+              <Label className="text-slate-700">Team</Label>
+              <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                placeholder="Engineering"
-                className="border-slate-200 bg-slate-50"
-              />
+                className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+              >
+                <option value="">Select team…</option>
+                {TEAMS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="space-y-2">
