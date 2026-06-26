@@ -39,7 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router])
 
   useEffect(() => {
-    void loadSession()
+    const timer = setTimeout(() => {
+      void loadSession()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [loadSession])
 
   const logout = () => {

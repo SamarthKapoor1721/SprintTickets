@@ -22,6 +22,69 @@ export function serializeUser(user: UserWithRelations) {
   };
 }
 
+export function serializeUserDetail(
+  user: UserWithRelations,
+  relations: {
+    ownedProjects?: (Project & {
+      owner?: User | null;
+      memberships?: (ProjectMember & { user: User })[];
+    })[];
+    memberProjects?: (Project & {
+      owner?: User | null;
+      memberships?: (ProjectMember & { user: User })[];
+    })[];
+    submittedReviews?: (ReviewRequest & {
+      submitter?: User | null;
+      reviewer?: User | null;
+    })[];
+    reviewedReviews?: (ReviewRequest & {
+      submitter?: User | null;
+      reviewer?: User | null;
+    })[];
+    assignedTasks?: (Task & {
+      assignee?: User | null;
+      creator?: User | null;
+    })[];
+    createdTasks?: (Task & {
+      assignee?: User | null;
+      creator?: User | null;
+    })[];
+    reports?: (DailyProgressReport & {
+      submitter?: User | null;
+      project?: Project | null;
+    })[];
+  },
+) {
+  const ownedProjects = (relations.ownedProjects ?? []).map(serializeProject);
+  const memberProjects = (relations.memberProjects ?? []).map(serializeProject);
+  const submittedReviews = (relations.submittedReviews ?? []).map(serializeReview);
+  const reviewedReviews = (relations.reviewedReviews ?? []).map(serializeReview);
+  const assignedTasks = (relations.assignedTasks ?? []).map(serializeTask);
+  const createdTasks = (relations.createdTasks ?? []).map(serializeTask);
+  const reports = (relations.reports ?? []).map(serializeReport);
+
+  return {
+    ...serializeUser(user),
+    onboarding_pending: Boolean(user.onboardingToken) || !user.hashedPassword,
+    counts: {
+      owned_projects: ownedProjects.length,
+      member_projects: memberProjects.length,
+      submitted_reviews: submittedReviews.length,
+      reviewed_reviews: reviewedReviews.length,
+      assigned_tasks: assignedTasks.length,
+      created_tasks: createdTasks.length,
+      reports: reports.length,
+    },
+    owned_projects: ownedProjects,
+    member_projects: memberProjects,
+    submitted_reviews: submittedReviews,
+    reviewed_reviews: reviewedReviews,
+    assigned_tasks: assignedTasks,
+    created_tasks: createdTasks,
+    reports,
+  };
+}
+
 export function serializeProject(
   project: Project & {
     owner?: User | null;
