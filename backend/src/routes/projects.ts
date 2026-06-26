@@ -19,7 +19,9 @@ const projectCreateSchema = z.object({
   status: z.enum(["active", "completed", "on_hold"]).optional(),
 });
 
-const projectUpdateSchema = projectCreateSchema.partial();
+const projectUpdateSchema = projectCreateSchema.partial().extend({
+  owner_id: z.number().int().nullable().optional(),
+});
 
 const projectMemberAddSchema = z.object({
   user_id: z.number().int(),
@@ -85,7 +87,7 @@ projectsRouter.get(
 projectsRouter.post(
   "",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager),
+  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const body = parseBody(projectCreateSchema, req.body);
     if (!req.authUser) {
@@ -126,7 +128,7 @@ projectsRouter.get(
 projectsRouter.patch(
   "/:projectId",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager),
+  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -141,19 +143,49 @@ projectsRouter.patch(
       throw forbidden("Not your project");
     }
 
-    const updated = await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(body.description !== undefined ? { description: body.description ?? null } : {}),
-        ...(body.department !== undefined ? { department: body.department ?? null } : {}),
-        ...(body.status !== undefined ? { status: body.status } : {}),
-      },
-      include: {
-        owner: true,
-        memberships: { include: { user: true } },
-      },
+    const nextOwnerId =
+      body.owner_id === undefined
+        ? undefined
+        : body.owner_id === null
+          ? null
+          : body.owner_id;
+    if (nextOwnerId !== undefined && nextOwnerId !== null) {
+      const nextOwner = await prisma.user.findUnique({ where: { id: nextOwnerId } });
+      if (!nextOwner) {
+        throw notFound("User not found");
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.description !== undefined ? { description: body.description ?? null } : {}),
+          ...(body.department !== undefined ? { department: body.department ?? null } : {}),
+          ...(body.status !== undefined ? { status: body.status } : {}),
+          ...(nextOwnerId !== undefined ? { ownerId: nextOwnerId } : {}),
+        },
+      });
+
+      if (nextOwnerId === null && project.ownerId != null) {
+        await tx.projectMember.deleteMany({
+          where: { projectId, userId: project.ownerId },
+        });
+      }
+
+      return tx.project.findUnique({
+        where: { id: projectId },
+        include: {
+          owner: true,
+          memberships: { include: { user: true } },
+        },
+      });
     });
+
+    if (!updated) {
+      throw notFound("Project not found");
+    }
 
     res.json(serializeProject(updated));
   }),
@@ -162,7 +194,7 @@ projectsRouter.patch(
 projectsRouter.delete(
   "/:projectId",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager),
+  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -213,7 +245,7 @@ projectsRouter.get(
 projectsRouter.post(
   "/:projectId/members",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager),
+  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -256,7 +288,7 @@ projectsRouter.post(
 projectsRouter.delete(
   "/:projectId/members/:userId",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager),
+  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     const userId = Number(req.params.userId);

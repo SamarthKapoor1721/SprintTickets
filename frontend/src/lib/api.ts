@@ -303,6 +303,7 @@ export interface ProjectUpdate {
   description?: string | null
   department?: string | null
   status?: string
+  owner_id?: number | null
 }
 
 export const createProject = (data: ProjectCreate) =>

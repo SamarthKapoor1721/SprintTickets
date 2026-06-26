@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { getMe, User, clearToken } from "./api"
 import { useRouter } from "next/navigation"
 
@@ -8,42 +8,28 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   logout: () => void
-  loadSession: () => Promise<User | null>
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  logout: () => {},
-  loadSession: async () => null,
-})
+const AuthContext = createContext<AuthContextType>({ user: null, loading: true, logout: () => {} })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  const loadSession = useCallback(async () => {
-    try {
-      const u = await getMe()
-      setUser(u)
-      return u
-    } catch {
-      clearToken()
-      setUser(null)
-      router.push("/auth/login")
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [router])
-
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadSession()
-    }, 0)
-    return () => clearTimeout(timer)
-  }, [loadSession])
+    getMe()
+      .then((u) => {
+        setUser(u)
+        setLoading(false)
+      })
+      .catch(() => {
+        clearToken()
+        setUser(null)
+        setLoading(false)
+        router.push("/auth/login")
+      })
+  }, [router])
 
   const logout = () => {
     clearToken()
@@ -52,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout, loadSession }}>
+    <AuthContext.Provider value={{ user, loading, logout }}>
       {children}
     </AuthContext.Provider>
   )

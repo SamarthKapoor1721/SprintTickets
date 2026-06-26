@@ -147,6 +147,24 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const handleLeadChange = async (nextOwnerId: number | null) => {
+    const previousOwnerId = project?.owner_id ?? null
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await updateProject(id, { owner_id: nextOwnerId })
+      setProject(updated)
+      if (nextOwnerId === null && previousOwnerId != null) {
+        setMembers((current) => current.filter((member) => member.id !== previousOwnerId))
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update team lead")
+      throw e
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) return <div className="text-sm text-slate-500">Loading project…</div>
   if (error && !project)
     return (
@@ -235,15 +253,61 @@ export default function ProjectDetailPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            {project.owner && (
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            {project.owner ? (
+              <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-3">
                   <Avatar u={project.owner} lead />
                   <div>
                     <p className="text-sm font-medium text-slate-900">{project.owner.full_name}</p>
-                    <p className="text-xs capitalize text-slate-500">Team Lead · {project.owner.role}</p>
+                    <p className="text-xs capitalize text-slate-500">
+                      Team Lead · {project.owner.role}
+                    </p>
                   </div>
                 </div>
+
+                {canManage && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ManageLeadDialog
+                      project={project}
+                      users={allUsers}
+                      onSaved={handleLeadChange}
+                      triggerLabel="Change lead"
+                      triggerVariant="outline"
+                    />
+                    <Button
+                      variant="ghost"
+                      onClick={async () => {
+                        if (!confirm("Remove the current team lead?")) return
+                        try {
+                          await handleLeadChange(null)
+                        } catch {
+                          // Error state is surfaced above the page.
+                        }
+                      }}
+                      disabled={busy}
+                      className="gap-2 text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove lead
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">No team lead assigned</p>
+                  <p className="text-xs text-slate-500">Assign a new lead to restore manager controls.</p>
+                </div>
+                {canManage && (
+                  <ManageLeadDialog
+                    project={project}
+                    users={allUsers}
+                    onSaved={handleLeadChange}
+                    triggerLabel="Assign lead"
+                    triggerVariant="default"
+                  />
+                )}
               </div>
             )}
             {members
@@ -473,6 +537,113 @@ function EditProjectDialog({
             className="bg-primary text-white hover:bg-primary/90 cursor-pointer"
           >
             {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ManageLeadDialog({
+  project,
+  users,
+  onSaved,
+  triggerLabel,
+  triggerVariant,
+}: {
+  project: Project
+  users: User[]
+  onSaved: (ownerId: number | null) => Promise<void> | void
+  triggerLabel: string
+  triggerVariant: "default" | "outline"
+}) {
+  const [open, setOpen] = useState(false)
+  const [selectedOwnerId, setSelectedOwnerId] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        setSelectedOwnerId(project.owner_id != null ? String(project.owner_id) : "")
+        setErr(null)
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [open, project.owner_id])
+
+  const submit = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await onSaved(selectedOwnerId ? Number(selectedOwnerId) : null)
+      setOpen(false)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to update team lead")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button
+            variant={triggerVariant}
+            className={`gap-2 cursor-pointer ${
+              triggerVariant === "outline"
+                ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                : "bg-primary text-white hover:bg-primary/90"
+            }`}
+          >
+            <Edit3 className="h-4 w-4" />
+            {triggerLabel}
+          </Button>
+        }
+      />
+      <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Manage team lead</DialogTitle>
+          <DialogDescription className="text-slate-500">
+            Move the lead role to another user or clear it completely.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label className="text-slate-700">Lead</Label>
+            <select
+              value={selectedOwnerId}
+              onChange={(e) => setSelectedOwnerId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+            >
+              <option value="">No team lead assigned</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name ?? user.email} ({user.role})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Clearing the lead removes the current lead from the team roster if they are only there as lead.
+          </div>
+          {err && <p className="text-sm text-red-600">{err}</p>}
+        </div>
+        <DialogFooter>
+          <DialogClose
+            render={
+              <Button variant="ghost" className="text-slate-500 cursor-pointer">
+                Cancel
+              </Button>
+            }
+          />
+          <Button
+            onClick={submit}
+            disabled={busy}
+            className="bg-primary text-white hover:bg-primary/90 cursor-pointer"
+          >
+            {busy ? "Saving…" : "Save lead"}
           </Button>
         </DialogFooter>
       </DialogContent>
