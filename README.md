@@ -1,107 +1,155 @@
-# Executive Review Hub (ERH)
+# Sprint Tickets
 
-**Executive Review Hub** is an internal enterprise web platform designed to streamline and formalize project review requests sent to the CEO. 
+**Sprint Tickets** is an internal enterprise web platform that streamlines and formalizes project review requests sent to the CEO.
 
-By replacing ad-hoc communication (WhatsApp, Slack, hallway conversations) with a unified digital workflow, ERH provides complete transparency into the project review lifecycle, reduces backlogs, and ensures executives have all the context they need to make rapid decisions.
+By replacing ad-hoc communication (WhatsApp, Slack, hallway conversations) with a unified digital workflow, it provides complete transparency into the project review lifecycle, reduces backlogs, and ensures executives have all the context they need to make rapid decisions.
 
 ---
 
 ## 👥 User Roles & Capabilities
 
-The platform is driven by a strict role-based access control system:
+The platform is driven by a role-based access control system enforced on both the API and the UI.
 
 ### 1. The CEO (System Admin)
-* **Singleton Role:** There is only one CEO account in the system.
-* **Capabilities:** View every project and employee, review all submissions, approve/reject requests, add comments, assign secondary reviewers, and track pending review metrics.
-* **Dashboard:** A bird's-eye view of all pending, urgent, and recently approved reviews across the company.
+* View every project, team, and user across the company.
+* Review all submissions: **approve / reject / request changes**, add comments, assign reviewers.
+* Create and delete teams, manage any team's members.
+* Direct-message any employee or manager.
 
 ### 2. Project Manager / Team Lead
-* **Capabilities:** Create projects, add team members, review employee work before escalating it to the CEO, submit projects to the CEO, and track approval status.
-* **Dashboard:** Focused on team output, pending team reviews, and tracking CEO bottlenecks.
+* Create teams (projects) and manage their members.
+* See all reviews; act on submissions (approve / reject / request changes) and comment.
+* Delete teams they own.
+* Message teammates and the CEO.
 
 ### 3. Employee
-* **Capabilities:** View assigned projects, upload deliverables (Figma, GitHub PRs, staging links), and submit milestones for review.
-* **Dashboard:** Focused on personal submissions, draft reviews, and recent activity statuses.
+* View teams they belong to and submit review requests with deliverables (Figma, GitHub PRs, staging links, docs).
+* Track the status of their own submissions and comment on them.
+* Message teammates and the CEO.
+
+---
+
+## ✨ Features
+
+- **JWT authentication** with role-based access control (CEO / Manager / Employee).
+- **Teams** — every project is a team with a **lead** (owner) and members; add/remove members, view a team's reviews, delete a team.
+- **Review lifecycle** — submit a review → reviewers approve / reject / request changes → threaded comments → status reflected across dashboards.
+- **Role-aware dashboards** — live pending / urgent / approved metrics and activity lists computed from real data.
+- **Private direct messaging** — 1:1 chat between any users (e.g. CEO ↔ employee/manager) with unread counts and live polling.
+- **Light, professional UI** — Linear/Stripe-inspired light theme.
 
 ---
 
 ## 🛠 Tech Stack & Architecture
 
-This project is structured as a **Monorepo** containing decoupled frontend and backend services.
+This project is a **monorepo** with decoupled frontend and backend services.
 
 ### Frontend
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript
-- **Styling:** Tailwind CSS (Premium Dark Mode Aesthetic)
-- **Components:** Shadcn UI + Radix UI
+- **Styling:** Tailwind CSS v4 (professional **light** theme)
+- **Components:** shadcn / base-ui
 - **Animations:** Framer Motion
 - **Icons:** Lucide React
 
 ### Backend
 - **Framework:** FastAPI
 - **Language:** Python 3.10+
-- **Database:** SQLite (Local Dev) / PostgreSQL (Production)
+- **Database:** SQLite (local dev, via `aiosqlite`) / PostgreSQL (production)
 - **ORM:** SQLAlchemy (Async) + Alembic (Migrations)
-- **Auth:** JWT-based authentication (Upcoming)
+- **Auth:** JWT (`python-jose`) + bcrypt password hashing
+
+### Ports
+| Service | URL |
+|---------|-----|
+| Backend API | http://127.0.0.1:8008 (Swagger at `/docs`) |
+| Frontend | http://localhost:4321 |
+
+> Port **8008** is used (instead of 8000) to avoid clashing with other local Docker stacks.
 
 ---
 
 ## 🚀 Running the Project Locally
 
-Follow these steps to spin up the entire stack on your local machine. 
-
 ### Prerequisites
 - Node.js 18+
 - Python 3.10+
-- `uv` or `pip` package manager
 
-### 1. Start the Backend API (FastAPI)
-The backend is currently configured to use `aiosqlite` for local development, meaning no Docker container is required for the database yet.
+### 1. Backend (FastAPI)
+The backend uses `aiosqlite` for local development — no Docker/database container required.
 
 ```bash
-# 1. Navigate to the backend directory
 cd backend
 
-# 2. Create and activate a virtual environment
+# Create & activate a virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 
-# 3. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 4. Run database migrations to create tables
+# Create the database tables
 alembic upgrade head
 
-# 5. (First run only) Seed demo accounts + sample data
+# (First run only) seed demo accounts + sample data
 python -m app.seed
-
-# 6. Start the FastAPI development server (port 8008 to avoid 8000 conflicts)
-uvicorn app.main:app --port 8008 --reload
 ```
-*The backend API will be available at [http://127.0.0.1:8008](http://127.0.0.1:8008)*
-*Interactive Swagger Documentation is available at [http://127.0.0.1:8008/docs](http://127.0.0.1:8008/docs)*
 
-**Demo accounts** (all use password `password123`): `ceo@erh.dev`, `manager@erh.dev`, `employee@erh.dev`
-
-### 2. Start the Frontend Application (Next.js)
-Open a **new terminal window** to start the frontend.
+Then start it. The helper script frees the port first, so you can re-run it anytime
+without "Address already in use":
 
 ```bash
-# 1. Navigate to the frontend directory
-cd frontend
-
-# 2. Install Node dependencies
-npm install
-
-# 3. Start the Next.js development server
-npm run dev
+./run.sh
 ```
-*The frontend will run on [http://localhost:4321](http://localhost:4321).*
+
+<details>
+<summary>Or start it manually</summary>
+
+```bash
+venv/bin/uvicorn app.main:app --port 8008 --reload
+```
+</details>
+
+### 2. Frontend (Next.js)
+Open a **second terminal**:
+
+```bash
+cd frontend
+npm install
+./run.sh        # frees port 4321 then runs `npm run dev`
+```
+
+Open **http://localhost:4321**.
+
+### Demo accounts
+All use the password **`password123`**:
+
+| Role | Email |
+|------|-------|
+| CEO | `ceo@erh.dev` |
+| Manager | `manager@erh.dev` |
+| Employee | `employee@erh.dev` |
+
+> Tip: to see direct messaging live, log in as the CEO in one browser and as the Employee in an incognito window.
+
+---
+
+## ⚙️ Configuration
+
+Backend settings live in [`backend/app/core/config.py`](backend/app/core/config.py) and can be
+overridden with a `backend/.env` file (see [`backend/.env.example`](backend/.env.example)).
+
+> **Production note:** set a strong `SECRET_KEY` in `backend/.env` — the default in code is for local dev only.
+
+To switch to PostgreSQL, point `SQLALCHEMY_DATABASE_URI` at your Postgres instance and run `alembic upgrade head`.
+
+The local SQLite database (`backend/erh.db`) is git-ignored; recreate it anytime with
+`alembic upgrade head && python -m app.seed`.
 
 ---
 
 ## 🎨 UI / Design Philosophy
-The frontend utilizes a premium, "Vercel/Linear-inspired" design system:
-- **Deep Dark Mode:** Enforced global dark theme using rich `oklch` color spaces.
-- **Glassmorphism:** Heavy use of `backdrop-blur` and translucent cards to create depth.
-- **Micro-interactions:** Staggered fade-ins and dynamic hover states powered by Framer Motion.
+A clean, professional **light** design system (Linear / Stripe / Vercel-inspired):
+- **Light theme** built on a slate canvas with white, softly-elevated cards.
+- **Trust-blue accent** (`#2563EB`) with status colors (amber = pending, emerald = approved, red = rejected, orange = needs changes).
+- **Inter** typography and subtle Framer Motion micro-interactions.
