@@ -1,9 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { ReactNode, useState, useEffect } from "react"
-import { clearToken } from "@/lib/api"
+import { usePathname } from "next/navigation"
+import { ReactNode } from "react"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard,
@@ -13,34 +12,33 @@ import {
   PlusCircle,
   LogOut,
   Bell,
-  MessageSquare
+  MessageSquare,
+  ClipboardList,
+  FileText,
+  Users
 } from "lucide-react"
+import { AuthProvider, useAuth } from "@/lib/auth-context"
 
 interface DashboardLayoutProps {
   children: ReactNode
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+function DashboardContent({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const router = useRouter()
-  const [role, setRole] = useState<string>("employee")
+  const { user, loading, logout } = useAuth()
 
-  const handleLogout = () => {
-    clearToken()
-    localStorage.removeItem("userRole")
-    router.push("/")
+  if (loading || !user) {
+    return <div className="flex h-screen items-center justify-center text-slate-500">Loading...</div>
   }
 
-  useEffect(() => {
-    const savedRole = localStorage.getItem("userRole")
-    if (savedRole) {
-      setRole(savedRole)
-    }
-  }, [])
+  const role = user.role
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Users", href: "/dashboard/users", icon: Users },
     { name: "Teams", href: "/dashboard/projects", icon: FolderKanban },
+    { name: "Tasks", href: "/dashboard/tasks", icon: ClipboardList },
+    { name: "Reports", href: "/dashboard/reports", icon: FileText },
     { name: "Pending Reviews", href: "/dashboard/reviews/pending", icon: Clock },
     { name: "Approved", href: "/dashboard/reviews/approved", icon: CheckCircle },
     { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
@@ -52,7 +50,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <aside className="relative z-20 hidden w-64 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="flex h-16 items-center px-6">
           <Link href="/dashboard" className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.ico"
               alt="Sprint Tickets logo"
@@ -83,7 +80,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </nav>
 
         <div className="space-y-4 p-4">
-          {role !== "ceo" && (
+          {(role === "employee" || role === "manager" || role === "super_admin" || role === "ceo") && (
             <Link href="/dashboard/reviews/new">
               <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-primary/20 transition-all hover:bg-primary/90 active:scale-[0.99] cursor-pointer">
                 <PlusCircle className="h-4 w-4" />
@@ -97,10 +94,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               {role.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium capitalize text-slate-900">{role === 'ceo' ? 'The CEO' : role}</p>
-              <p className="truncate text-xs text-slate-500">{role}@company.com</p>
+              <p className="truncate text-sm font-medium capitalize text-slate-900">{role.replace('_', ' ')}</p>
+              <p className="truncate text-xs text-slate-500">{user.email}</p>
             </div>
-            <button onClick={handleLogout} aria-label="Log out" className="text-slate-400 transition-colors hover:text-slate-700 cursor-pointer">
+            <button onClick={logout} aria-label="Log out" className="text-slate-400 transition-colors hover:text-slate-700 cursor-pointer">
               <LogOut className="h-4 w-4" />
             </button>
           </div>
@@ -152,5 +149,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  return (
+    <AuthProvider>
+      <DashboardContent>{children}</DashboardContent>
+    </AuthProvider>
   )
 }

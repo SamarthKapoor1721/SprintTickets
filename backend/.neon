@@ -1,0 +1,10 @@
+{
+  "_init": {
+    "features": [
+      "database",
+      "auth"
+    ]
+  },
+  "orgId": "org-polished-credit-05448133",
+  "projectId": "long-truth-03180050"
+}

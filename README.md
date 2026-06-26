@@ -143,6 +143,7 @@ Required variables:
 - `JWT_SECRET` - a strong random secret
 - `PORT` - defaults to `8008`
 - `CORS_ORIGINS` - comma-separated frontend origins
+- `NEXT_PUBLIC_APP_URL` - public frontend origin used for onboarding/magic links; set this in production so copied links do not point at `localhost`
 
 The schema is defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma) and the initial Neon migration lives in [`backend/prisma/migrations/0001_init/migration.sql`](backend/prisma/migrations/0001_init/migration.sql).
 

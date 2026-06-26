@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createProject, listProjects, type Project, type User } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 const statusStyles: Record<string, string> = {
   active: "bg-emerald-100 text-emerald-700",
@@ -53,10 +54,11 @@ function teamOf(p: Project): { user: User; lead: boolean }[] {
 }
 
 export default function ProjectsPage() {
+  const { user } = useAuth()
+  const role = user?.role ?? "employee"
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [role, setRole] = useState<string>("employee")
 
   const canManage = role === "ceo" || role === "manager"
 
@@ -69,7 +71,6 @@ export default function ProjectsPage() {
   }, [])
 
   useEffect(() => {
-    setRole(localStorage.getItem("userRole") ?? "employee")
     refresh()
   }, [refresh])
 

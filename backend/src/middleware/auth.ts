@@ -33,12 +33,18 @@ export const requireAuth = asyncHandler(async (req: Request, _res: Response, nex
   next();
 });
 
+import { hasMinimumRole, isSuperAdmin } from "../lib/rbac";
+
 export function requireRoles(...roles: UserRole[]) {
   return asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.authUser) {
       throw unauthorized();
     }
-    if (!roles.includes(req.authUser.role)) {
+    if (isSuperAdmin(req.authUser.role)) {
+      return next();
+    }
+    const hasAccess = roles.some((role) => hasMinimumRole(req.authUser!.role, role));
+    if (!hasAccess) {
       throw forbidden();
     }
     next();

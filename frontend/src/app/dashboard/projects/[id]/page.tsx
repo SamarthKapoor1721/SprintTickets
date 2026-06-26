@@ -30,6 +30,7 @@ import {
   type Review,
   type User,
 } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 const statusStyles: Record<string, string> = {
   active: "bg-emerald-100 text-emerald-700",
@@ -69,13 +70,14 @@ export default function ProjectDetailPage() {
   const [members, setMembers] = useState<User[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
-  const [role, setRole] = useState<string>("employee")
+  const { user } = useAuth()
+  const role = user?.role ?? "employee"
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState("")
   const [busy, setBusy] = useState(false)
 
-  const canManage = role === "ceo" || role === "manager"
+  const canManage = role === "ceo" || role === "manager" || role === "super_admin"
 
   const load = useCallback(() => {
     Promise.all([getProject(id), listMembers(id), listReviews({ projectId: id })])
@@ -89,11 +91,11 @@ export default function ProjectDetailPage() {
   }, [id])
 
   useEffect(() => {
-    const r = localStorage.getItem("userRole") ?? "employee"
-    setRole(r)
     load()
-    if (r === "ceo" || r === "manager") listUsers().then(setAllUsers).catch(() => {})
-  }, [load])
+    if (role === "ceo" || role === "manager" || role === "super_admin") {
+       listUsers().then(setAllUsers).catch(() => {})
+    }
+  }, [load, role])
 
   const memberIds = new Set(members.map((m) => m.id))
   const addable = allUsers.filter((u) => !memberIds.has(u.id))

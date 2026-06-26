@@ -13,41 +13,44 @@ import { serializeUser } from "../lib/serializers";
 
 export const authRouter = Router();
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+const onboardSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
   full_name: z.string().trim().optional().nullable(),
   department: z.string().trim().optional().nullable(),
-  role: z.nativeEnum(UserRole).optional(),
-});
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
 });
 
 authRouter.post(
-  "/register",
+  "/onboard",
   asyncHandler(async (req, res) => {
-    const body = parseBody(registerSchema, req.body);
-    const existing = await prisma.user.findUnique({ where: { email: body.email } });
-    if (existing) {
-      throw badRequest("Email already registered");
+    const body = parseBody(onboardSchema, req.body);
+    const user = await prisma.user.findUnique({ where: { onboardingToken: body.token } });
+    if (!user || !user.onboardingToken) {
+      throw badRequest("Invalid or expired onboarding token");
     }
 
-    const user = await prisma.user.create({
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
       data: {
-        email: body.email,
         hashedPassword: hashPassword(body.password),
-        fullName: body.full_name ?? null,
-        department: body.department ?? null,
-        role: body.role ?? UserRole.employee,
+        fullName: body.full_name ?? user.fullName,
+        department: body.department ?? user.department,
+        onboardingToken: null,
       },
     });
 
-    res.status(201).json(serializeUser(user));
+    res.status(200).json({
+      user: serializeUser(updatedUser),
+      access_token: createAccessToken(updatedUser.id),
+      token_type: "bearer",
+    });
   }),
 );
+
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1),
+});
 
 authRouter.post(
   "/login",
@@ -55,11 +58,12 @@ authRouter.post(
     const raw = req.body?.username ? { email: req.body.username, password: req.body.password } : req.body;
     const body = parseBody(loginSchema, raw);
     const user = await prisma.user.findUnique({ where: { email: body.email } });
-    if (!user || !verifyPassword(body.password, user.hashedPassword)) {
+    if (!user || !user.hashedPassword || !verifyPassword(body.password, user.hashedPassword)) {
       throw badRequest("Incorrect email or password");
     }
 
     res.json({
+      user: serializeUser(user),
       access_token: createAccessToken(user.id),
       token_type: "bearer",
     });
@@ -71,11 +75,12 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const body = parseBody(loginSchema, req.body);
     const user = await prisma.user.findUnique({ where: { email: body.email } });
-    if (!user || !verifyPassword(body.password, user.hashedPassword)) {
+    if (!user || !user.hashedPassword || !verifyPassword(body.password, user.hashedPassword)) {
       throw badRequest("Incorrect email or password");
     }
 
     res.json({
+      user: serializeUser(user),
       access_token: createAccessToken(user.id),
       token_type: "bearer",
     });
@@ -95,4 +100,29 @@ authRouter.get(
     }
     res.json(serializeUser(user));
   }),
+);
+
+authRouter.get(
+  "/google",
+  asyncHandler(async (req, res) => {
+    // Stub for Google OAuth redirect
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      throw badRequest("Google Auth is not configured");
+    }
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/v1/auth/google/callback`;
+    const scope = "email profile";
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=code&scope=${encodeURIComponent(scope)}`;
+    res.redirect(url);
+  })
+);
+
+authRouter.get(
+  "/google/callback",
+  asyncHandler(async (req, res) => {
+    // Stub for Google OAuth callback handling
+    res.json({ message: "Google Auth Callback Stub. Implement token exchange here." });
+  })
 );

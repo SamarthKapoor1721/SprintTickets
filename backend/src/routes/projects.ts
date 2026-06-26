@@ -8,6 +8,7 @@ import { parseBody, parseIntStrict } from "../lib/validation";
 import { forbidden, notFound, unauthorized } from "../lib/http-error";
 import { requireAuth, requireRoles } from "../middleware/auth";
 import { serializeProject, serializeUser } from "../lib/serializers";
+import { canManageProject, hasMinimumRole, isSuperAdmin } from "../lib/rbac";
 
 export const projectsRouter = Router();
 
@@ -40,9 +41,7 @@ async function getProjectOrThrow(projectId: number) {
   return project;
 }
 
-function canManageProject(currentUser: { id: number; role: UserRole }, ownerId: number | null) {
-  return currentUser.role === UserRole.ceo || ownerId === currentUser.id;
-}
+
 
 projectsRouter.get(
   "",
@@ -59,7 +58,7 @@ projectsRouter.get(
     }
 
     const where =
-      req.authUser.role === UserRole.ceo
+      hasMinimumRole(req.authUser.role, UserRole.ceo) || isSuperAdmin(req.authUser.role)
         ? undefined
         : {
             OR: [

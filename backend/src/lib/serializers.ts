@@ -5,6 +5,8 @@ import type {
   ProjectMember,
   ReviewRequest,
   User,
+  Task,
+  DailyProgressReport,
 } from "@prisma/client";
 
 type UserWithRelations = User;
@@ -107,5 +109,46 @@ export function serializeContact(input: {
     last_message: input.lastMessage?.content ?? null,
     last_at: input.lastMessage?.createdAt ?? null,
     unread: input.unread,
+  };
+}
+
+export function serializeTask(
+  task: Task & {
+    assignee?: User | null;
+    creator?: User | null;
+  },
+) {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    project_id: task.projectId,
+    assignee_id: task.assigneeId,
+    creator_id: task.creatorId,
+    assignee: task.assignee ? serializeUser(task.assignee) : null,
+    creator: task.creator ? serializeUser(task.creator) : null,
+    created_at: task.createdAt,
+    updated_at: task.updatedAt,
+  };
+}
+
+export function serializeReport(
+  report: DailyProgressReport & {
+    submitter?: User | null;
+    project?: Project | null;
+  },
+) {
+  return {
+    id: report.id,
+    content: report.content,
+    date: report.date,
+    submitter_id: report.submitterId,
+    project_id: report.projectId,
+    submitter: report.submitter ? serializeUser(report.submitter) : null,
+    project: report.project ? serializeProject(report.project) : null,
+    created_at: report.createdAt,
+    updated_at: report.updatedAt,
   };
 }

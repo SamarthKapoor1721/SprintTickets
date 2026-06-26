@@ -8,6 +8,7 @@ import { parseBody, parseIntStrict, parseOptionalInt } from "../lib/validation";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error";
 import { requireAuth } from "../middleware/auth";
 import { serializeComment, serializeReview } from "../lib/serializers";
+import { hasMinimumRole, isSuperAdmin } from "../lib/rbac";
 
 export const reviewsRouter = Router();
 
@@ -80,7 +81,7 @@ reviewsRouter.get(
     }
 
     const where =
-      req.authUser.role === UserRole.ceo || req.authUser.role === UserRole.manager
+      hasMinimumRole(req.authUser.role, UserRole.manager) || isSuperAdmin(req.authUser.role)
         ? whereBase
         : {
             ...whereBase,
@@ -176,7 +177,7 @@ reviewsRouter.patch(
     }
 
     const isDecision = body.status !== undefined || body.reviewer_id !== undefined;
-    const isPrivileged = req.authUser.role === UserRole.ceo || req.authUser.role === UserRole.manager;
+    const isPrivileged = hasMinimumRole(req.authUser.role, UserRole.manager) || isSuperAdmin(req.authUser.role);
 
     if (isDecision && !isPrivileged) {
       throw forbidden("Only reviewers can change status");

@@ -9,6 +9,8 @@ import { usersRouter } from "./routes/users";
 import { projectsRouter } from "./routes/projects";
 import { reviewsRouter } from "./routes/reviews";
 import { messagesRouter } from "./routes/messages";
+import { tasksRouter } from "./routes/tasks";
+import { reportsRouter } from "./routes/reports";
 
 export const app = express();
 
@@ -33,6 +35,8 @@ app.use("/api/v1/users", usersRouter);
 app.use("/api/v1/projects", projectsRouter);
 app.use("/api/v1/reviews", reviewsRouter);
 app.use("/api/v1/messages", messagesRouter);
+app.use("/api/v1/tasks", tasksRouter);
+app.use("/api/v1/reports", reportsRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ detail: "Not found" });

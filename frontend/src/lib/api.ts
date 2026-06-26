@@ -47,7 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 // ---- Types ----
-export type Role = "ceo" | "manager" | "employee"
+export type Role = "super_admin" | "ceo" | "manager" | "employee"
 export type ReviewStatus = "pending" | "approved" | "rejected" | "needs_changes"
 export type ReviewPriority = "low" | "medium" | "high" | "critical"
 
@@ -116,6 +116,50 @@ export interface ReviewCreate {
   project_id?: number | null
 }
 
+// ---- Tasks ----
+export interface Task {
+  id: number
+  title: string
+  description: string | null
+  status: "todo" | "in_progress" | "done"
+  priority: "low" | "medium" | "high" | "critical"
+  project_id: number
+  assignee_id: number | null
+  creator_id: number
+  assignee: User | null
+  creator: User | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskCreate {
+  title: string
+  description?: string
+  status?: "todo" | "in_progress" | "done"
+  priority?: "low" | "medium" | "high" | "critical"
+  project_id: number
+  assignee_id?: number
+}
+
+// ---- Reports ----
+export interface Report {
+  id: number
+  content: string
+  date: string
+  submitter_id: number
+  project_id: number | null
+  submitter: User | null
+  project: Project | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ReportCreate {
+  content: string
+  date: string
+  project_id?: number
+}
+
 // ---- Auth ----
 export async function login(email: string, password: string): Promise<string> {
   const body = new URLSearchParams({ username: email, password })
@@ -138,10 +182,57 @@ export async function login(email: string, password: string): Promise<string> {
   return data.access_token
 }
 
+export async function register(data: { email: string; password: string; full_name?: string; department?: string }): Promise<string> {
+  const res = await fetch(`${API_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    let detail = "Registration failed"
+    try {
+      detail = (await res.json()).detail ?? detail
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail)
+  }
+  const result = (await res.json()) as { access_token: string }
+  setToken(result.access_token)
+  return result.access_token
+}
+
 export const getMe = () => request<User>("/auth/me")
+
+export async function onboard(token: string, password: string, full_name?: string, department?: string): Promise<string> {
+  const body = new URLSearchParams({ token, password })
+  if (full_name) body.append("full_name", full_name)
+  if (department) body.append("department", department)
+  
+  const res = await request<{ access_token: string }>("/auth/onboard", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  })
+  setToken(res.access_token)
+  return res.access_token
+}
 
 // ---- Users ----
 export const listUsers = () => request<User[]>("/users")
+
+export interface UserCreate {
+  email: string
+  full_name?: string
+  department?: string
+  role?: string
+}
+
+export const createUser = (data: UserCreate) =>
+  request<User & { onboardingToken: string }>("/users", { method: "POST", body: JSON.stringify(data) })
+
+export const deleteUser = (id: number) =>
+  request<void>(`/users/${id}`, { method: "DELETE" })
 
 // ---- Projects ----
 export const listProjects = () => request<Project[]>("/projects")
@@ -231,3 +322,34 @@ export const sendMessage = (userId: number, content: string) =>
     method: "POST",
     body: JSON.stringify({ content }),
   })
+
+// ---- Tasks ----
+export const listTasks = (projectId?: number) => {
+  const params = new URLSearchParams()
+  if (projectId != null) params.set("project_id", String(projectId))
+  const qs = params.toString()
+  return request<Task[]>(`/tasks${qs ? `?${qs}` : ""}`)
+}
+
+export const createTask = (data: TaskCreate) =>
+  request<Task>("/tasks", { method: "POST", body: JSON.stringify(data) })
+
+export const updateTask = (id: number, patch: Partial<TaskCreate>) =>
+  request<Task>(`/tasks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+
+export const deleteTask = (id: number) =>
+  request<void>(`/tasks/${id}`, { method: "DELETE" })
+
+// ---- Reports ----
+export const listReports = (projectId?: number) => {
+  const params = new URLSearchParams()
+  if (projectId != null) params.set("project_id", String(projectId))
+  const qs = params.toString()
+  return request<Report[]>(`/reports${qs ? `?${qs}` : ""}`)
+}
+
+export const createReport = (data: ReportCreate) =>
+  request<Report>("/reports", { method: "POST", body: JSON.stringify(data) })

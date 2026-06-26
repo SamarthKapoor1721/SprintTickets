@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Clock, AlertCircle, ChevronRight, CheckCircle2, FolderKanban, LucideIcon } from "lucide-react"
 import { listProjects, listReviews, type Project, type Review } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 const container = {
   hidden: { opacity: 0 },
@@ -80,13 +81,13 @@ function ReviewRow({ r }: { r: Review }) {
 }
 
 export default function DashboardPage() {
-  const [role, setRole] = useState<string>("employee")
+  const { user } = useAuth()
+  const role = user?.role ?? "employee"
   const [reviews, setReviews] = useState<Review[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setRole(localStorage.getItem("userRole") ?? "employee")
     Promise.all([listReviews(), listProjects()])
       .then(([r, p]) => {
         setReviews(r)

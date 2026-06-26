@@ -24,6 +24,7 @@ import {
   type Review,
   type ReviewStatus,
 } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 const priorityStyles: Record<string, string> = {
   critical: "bg-red-100 text-red-700",
@@ -58,11 +59,12 @@ export default function ReviewDetailPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [role, setRole] = useState<string>("employee")
+  const { user } = useAuth()
+  const role = user?.role ?? "employee"
   const [newComment, setNewComment] = useState("")
   const [busy, setBusy] = useState(false)
 
-  const canDecide = role === "ceo" || role === "manager"
+  const canDecide = role === "ceo" || role === "manager" || role === "super_admin"
 
   const load = useCallback(() => {
     Promise.all([getReview(id), listComments(id)])
@@ -75,7 +77,6 @@ export default function ReviewDetailPage() {
   }, [id])
 
   useEffect(() => {
-    setRole(localStorage.getItem("userRole") ?? "employee")
     load()
   }, [load])
 
