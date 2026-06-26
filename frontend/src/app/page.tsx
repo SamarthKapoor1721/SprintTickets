@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { login } from "@/lib/api"
 
-// Seeded demo accounts (see backend/app/seed.py). All share this password.
+// Seeded demo accounts (see backend/prisma/seed.ts). All share this password.
 const DEMO_ACCOUNTS: Record<string, string> = {
   ceo: "ceo@erh.dev",
   manager: "manager@erh.dev",

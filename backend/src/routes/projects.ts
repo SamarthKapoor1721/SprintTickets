@@ -1,0 +1,283 @@
+import { Router } from "express";
+import { UserRole } from "@prisma/client";
+import { z } from "zod";
+
+import { prisma } from "../lib/prisma";
+import { asyncHandler } from "../lib/async-handler";
+import { parseBody, parseIntStrict } from "../lib/validation";
+import { forbidden, notFound, unauthorized } from "../lib/http-error";
+import { requireAuth, requireRoles } from "../middleware/auth";
+import { serializeProject, serializeUser } from "../lib/serializers";
+
+export const projectsRouter = Router();
+
+const projectCreateSchema = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().optional().nullable(),
+  department: z.string().trim().optional().nullable(),
+  status: z.enum(["active", "completed", "on_hold"]).optional(),
+});
+
+const projectUpdateSchema = projectCreateSchema.partial();
+
+const projectMemberAddSchema = z.object({
+  user_id: z.number().int(),
+});
+
+async function getProjectOrThrow(projectId: number) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      owner: true,
+      memberships: { include: { user: true } },
+    },
+  });
+
+  if (!project) {
+    throw notFound("Project not found");
+  }
+
+  return project;
+}
+
+function canManageProject(currentUser: { id: number; role: UserRole }, ownerId: number | null) {
+  return currentUser.role === UserRole.ceo || ownerId === currentUser.id;
+}
+
+projectsRouter.get(
+  "",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const skip = Number.isFinite(Number(req.query.skip))
+      ? Math.max(0, parseIntStrict(req.query.skip, "skip"))
+      : 0;
+    const limit = Number.isFinite(Number(req.query.limit))
+      ? Math.max(0, parseIntStrict(req.query.limit, "limit"))
+      : 100;
+    if (!req.authUser) {
+      throw unauthorized();
+    }
+
+    const where =
+      req.authUser.role === UserRole.ceo
+        ? undefined
+        : {
+            OR: [
+              { ownerId: req.authUser.id },
+              { memberships: { some: { userId: req.authUser.id } } },
+            ],
+          };
+
+    const projects = await prisma.project.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        owner: true,
+        memberships: { include: { user: true } },
+      },
+    });
+
+    res.json(projects.map(serializeProject));
+  }),
+);
+
+projectsRouter.post(
+  "",
+  requireAuth,
+  requireRoles(UserRole.ceo, UserRole.manager),
+  asyncHandler(async (req, res) => {
+    const body = parseBody(projectCreateSchema, req.body);
+    if (!req.authUser) {
+      throw unauthorized();
+    }
+
+    const project = await prisma.project.create({
+      data: {
+        name: body.name,
+        description: body.description ?? null,
+        department: body.department ?? null,
+        status: body.status ?? "active",
+        ownerId: req.authUser.id,
+      },
+      include: {
+        owner: true,
+        memberships: { include: { user: true } },
+      },
+    });
+
+    res.status(201).json(serializeProject(project));
+  }),
+);
+
+projectsRouter.get(
+  "/:projectId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    if (!Number.isInteger(projectId)) {
+      throw notFound("Project not found");
+    }
+    const project = await getProjectOrThrow(projectId);
+    res.json(serializeProject(project));
+  }),
+);
+
+projectsRouter.patch(
+  "/:projectId",
+  requireAuth,
+  requireRoles(UserRole.ceo, UserRole.manager),
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    if (!Number.isInteger(projectId)) {
+      throw notFound("Project not found");
+    }
+    const body = parseBody(projectUpdateSchema, req.body);
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) {
+      throw notFound("Project not found");
+    }
+    if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
+      throw forbidden("Not your project");
+    }
+
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.description !== undefined ? { description: body.description ?? null } : {}),
+        ...(body.department !== undefined ? { department: body.department ?? null } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+      },
+      include: {
+        owner: true,
+        memberships: { include: { user: true } },
+      },
+    });
+
+    res.json(serializeProject(updated));
+  }),
+);
+
+projectsRouter.delete(
+  "/:projectId",
+  requireAuth,
+  requireRoles(UserRole.ceo, UserRole.manager),
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    if (!Number.isInteger(projectId)) {
+      throw notFound("Project not found");
+    }
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) {
+      throw notFound("Project not found");
+    }
+    if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
+      throw forbidden("Only the team lead or CEO can delete this project");
+    }
+
+    await prisma.$transaction([
+      prisma.reviewRequest.updateMany({
+        where: { projectId },
+        data: { projectId: null },
+      }),
+      prisma.projectMember.deleteMany({
+        where: { projectId },
+      }),
+      prisma.project.delete({
+        where: { id: projectId },
+      }),
+    ]);
+
+    res.status(204).send();
+  }),
+);
+
+projectsRouter.get(
+  "/:projectId/members",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    if (!Number.isInteger(projectId)) {
+      throw notFound("Project not found");
+    }
+    await getProjectOrThrow(projectId);
+    const members = await prisma.projectMember.findMany({
+      where: { projectId },
+      include: { user: true },
+    });
+    res.json(members.map((member) => serializeUser(member.user)));
+  }),
+);
+
+projectsRouter.post(
+  "/:projectId/members",
+  requireAuth,
+  requireRoles(UserRole.ceo, UserRole.manager),
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    if (!Number.isInteger(projectId)) {
+      throw notFound("Project not found");
+    }
+    const body = parseBody(projectMemberAddSchema, req.body);
+    const project = await getProjectOrThrow(projectId);
+    if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
+      throw forbidden("Only the project owner or CEO can add members");
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: body.user_id } });
+    if (!user) {
+      throw notFound("User not found");
+    }
+
+    await prisma.projectMember.upsert({
+      where: {
+        projectId_userId: {
+          projectId,
+          userId: body.user_id,
+        },
+      },
+      create: {
+        projectId,
+        userId: body.user_id,
+      },
+      update: {},
+    });
+
+    const members = await prisma.projectMember.findMany({
+      where: { projectId },
+      include: { user: true },
+    });
+
+    res.status(201).json(members.map((member) => serializeUser(member.user)));
+  }),
+);
+
+projectsRouter.delete(
+  "/:projectId/members/:userId",
+  requireAuth,
+  requireRoles(UserRole.ceo, UserRole.manager),
+  asyncHandler(async (req, res) => {
+    const projectId = Number(req.params.projectId);
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(projectId) || !Number.isInteger(userId)) {
+      throw notFound("Project not found");
+    }
+    const project = await getProjectOrThrow(projectId);
+    if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
+      throw forbidden("Only the project owner or CEO can remove members");
+    }
+
+    await prisma.projectMember.deleteMany({
+      where: { projectId, userId },
+    });
+
+    const members = await prisma.projectMember.findMany({
+      where: { projectId },
+      include: { user: true },
+    });
+
+    res.json(members.map((member) => serializeUser(member.user)));
+  }),
+);

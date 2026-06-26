@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ceo
+  manager
+  employee
+}
+
+enum ProjectStatus {
+  active
+  completed
+  on_hold
+}
+
+enum ReviewStatus {
+  pending
+  approved
+  rejected
+  needs_changes
+}
+
+enum ReviewPriority {
+  low
+  medium
+  high
+  critical
+}
+
+model User {
+  id               Int              @id @default(autoincrement())
+  email            String           @unique
+  hashedPassword   String           @map("hashed_password")
+  fullName         String?          @map("full_name")
+  role             UserRole         @default(employee)
+  department       String?
+  isActive         Boolean          @default(true) @map("is_active")
+  ownedProjects    Project[]        @relation("ProjectOwner")
+  submittedReviews ReviewRequest[]  @relation("ReviewSubmitter")
+  reviewedReviews  ReviewRequest[]  @relation("ReviewReviewer")
+  authoredComments Comment[]        @relation("CommentAuthor")
+  sentMessages     Message[]        @relation("MessageSender")
+  receivedMessages Message[]        @relation("MessageRecipient")
+  memberships      ProjectMember[]
+
+  @@index([fullName])
+  @@map("users")
+}
+
+model Project {
+  id           Int              @id @default(autoincrement())
+  name         String
+  description  String?
+  department   String?
+  status       ProjectStatus    @default(active)
+  ownerId      Int?             @map("owner_id")
+  owner        User?            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  memberships  ProjectMember[]
+  reviews      ReviewRequest[]
+  createdAt    DateTime?        @default(now()) @map("created_at")
+  updatedAt    DateTime?        @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId Int @map("project_id")
+  userId    Int @map("user_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@map("project_members")
+}
+
+model ReviewRequest {
+  id                 Int             @id @default(autoincrement())
+  title              String
+  summary            String?
+  objective          String?
+  status             ReviewStatus    @default(pending)
+  priority           ReviewPriority   @default(medium)
+  reviewType         String?         @map("review_type")
+  websiteUrl         String?         @map("website_url")
+  githubRepo         String?         @map("github_repo")
+  figmaLink          String?         @map("figma_link")
+  documentationLink  String?         @map("documentation_link")
+  techDetails        Json?           @map("tech_details")
+  projectId          Int?            @map("project_id")
+  project            Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  submitterId        Int?            @map("submitter_id")
+  submitter          User?           @relation("ReviewSubmitter", fields: [submitterId], references: [id], onDelete: SetNull)
+  reviewerId         Int?            @map("reviewer_id")
+  reviewer           User?           @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  comments           Comment[]
+  createdAt          DateTime?       @default(now()) @map("created_at")
+  updatedAt          DateTime?       @updatedAt @map("updated_at")
+
+  @@index([title])
+  @@map("review_requests")
+}
+
+model Comment {
+  id               Int           @id @default(autoincrement())
+  content          String
+  reviewRequestId  Int?          @map("review_request_id")
+  reviewRequest    ReviewRequest? @relation(fields: [reviewRequestId], references: [id], onDelete: Cascade)
+  authorId         Int?          @map("author_id")
+  author           User?         @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt        DateTime?     @default(now()) @map("created_at")
+
+  @@map("comments")
+}
+
+model Message {
+  id           Int       @id @default(autoincrement())
+  content      String
+  senderId     Int       @map("sender_id")
+  sender       User      @relation("MessageSender", fields: [senderId], references: [id])
+  recipientId  Int       @map("recipient_id")
+  recipient    User      @relation("MessageRecipient", fields: [recipientId], references: [id])
+  isRead       Boolean   @default(false) @map("is_read")
+  createdAt    DateTime? @default(now()) @map("created_at")
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@map("messages")
+}

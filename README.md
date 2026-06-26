@@ -53,16 +53,16 @@ This project is a **monorepo** with decoupled frontend and backend services.
 - **Icons:** Lucide React
 
 ### Backend
-- **Framework:** FastAPI
-- **Language:** Python 3.10+
-- **Database:** SQLite (local dev, via `aiosqlite`) / PostgreSQL (production)
-- **ORM:** SQLAlchemy (Async) + Alembic (Migrations)
-- **Auth:** JWT (`python-jose`) + bcrypt password hashing
+- **Framework:** Node.js + Express
+- **Language:** TypeScript
+- **Database:** Neon Postgres
+- **ORM / Migrations:** Prisma + SQL migration baseline
+- **Auth:** JWT (`jsonwebtoken`) + bcrypt password hashing
 
 ### Ports
 | Service | URL |
 |---------|-----|
-| Backend API | http://127.0.0.1:8008 (Swagger at `/docs`) |
+| Backend API | http://127.0.0.1:8008 (health at `/api/v1/status`) |
 | Frontend | http://localhost:4321 |
 
 > Port **8008** is used (instead of 8000) to avoid clashing with other local Docker stacks.
@@ -72,27 +72,27 @@ This project is a **monorepo** with decoupled frontend and backend services.
 ## 🚀 Running the Project Locally
 
 ### Prerequisites
-- Node.js 18+
-- Python 3.10+
+- Node.js 20+
+- npm 10+
 
-### 1. Backend (FastAPI)
-The backend uses `aiosqlite` for local development — no Docker/database container required.
+### 1. Backend (Node.js + Neon)
+The backend uses Neon Postgres directly. No local Postgres container or SQLite file is required.
 
 ```bash
 cd backend
 
-# Create & activate a virtual environment
-python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-
 # Install dependencies
-pip install -r requirements.txt
+npm install
 
-# Create the database tables
-alembic upgrade head
+# Initialize the Neon project locally if needed
+npx neonctl@latest init
 
-# (First run only) seed demo accounts + sample data
-python -m app.seed
+# Copy backend/.env.example to backend/.env and set DATABASE_URL
+# to your Neon connection string with sslmode=require.
+
+# Apply the migration baseline and seed demo data
+npm run db:migrate
+npm run db:seed
 ```
 
 Then start it. The helper script frees the port first, so you can re-run it anytime
@@ -106,7 +106,7 @@ without "Address already in use":
 <summary>Or start it manually</summary>
 
 ```bash
-venv/bin/uvicorn app.main:app --port 8008 --reload
+npm run dev
 ```
 </details>
 
@@ -136,15 +136,17 @@ All use the password **`password123`**:
 
 ## ⚙️ Configuration
 
-Backend settings live in [`backend/app/core/config.py`](backend/app/core/config.py) and can be
-overridden with a `backend/.env` file (see [`backend/.env.example`](backend/.env.example)).
+Backend settings live in [`backend/.env.example`](backend/.env.example) and can be overridden with a `backend/.env` file.
 
-> **Production note:** set a strong `SECRET_KEY` in `backend/.env` — the default in code is for local dev only.
+Required variables:
+- `DATABASE_URL` - your Neon connection string, including `sslmode=require`
+- `JWT_SECRET` - a strong random secret
+- `PORT` - defaults to `8008`
+- `CORS_ORIGINS` - comma-separated frontend origins
 
-To switch to PostgreSQL, point `SQLALCHEMY_DATABASE_URI` at your Postgres instance and run `alembic upgrade head`.
+The schema is defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma) and the initial Neon migration lives in [`backend/prisma/migrations/0001_init/migration.sql`](backend/prisma/migrations/0001_init/migration.sql).
 
-The local SQLite database (`backend/erh.db`) is git-ignored; recreate it anytime with
-`alembic upgrade head && python -m app.seed`.
+Demo data is seeded from [`backend/prisma/seed.ts`](backend/prisma/seed.ts) and is safe to rerun.
 
 ---
 
