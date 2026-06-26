@@ -119,6 +119,18 @@ usersRouter.get(
         include: {
           submitter: true,
           project: { include: projectDetailInclude },
+          taskLinks: {
+            include: {
+              task: {
+                include: {
+                  assignee: true,
+                  creator: true,
+                  sprint: true,
+                },
+              },
+            },
+          },
+          attachments: true,
         },
       }),
     ]);

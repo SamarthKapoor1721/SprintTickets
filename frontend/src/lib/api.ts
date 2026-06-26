@@ -46,13 +46,44 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function requestMultipart<T>(path: string, body: FormData, options: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+    body,
+  })
+
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const payload = await res.json()
+      detail = payload.detail ?? detail
+    } catch {
+      /* ignore non-JSON error bodies */
+    }
+    throw new Error(typeof detail === "string" ? detail : "Request failed")
+  }
+
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
 // ---- Types ----
 export type Role = "super_admin" | "ceo" | "manager" | "employee"
 export type ReviewStatus = "pending" | "approved" | "rejected" | "needs_changes"
 export type ReviewPriority = "low" | "medium" | "high" | "critical"
+export type SprintStatus = "planned" | "active" | "completed"
+export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "blocked" | "done"
+export type TaskPriority = "low" | "medium" | "high" | "critical"
+export type TaskIssueType = "story" | "task" | "bug" | "epic"
 
 export interface User {
   id: number
+  employee_id: number
   email: string
   full_name: string | null
   department: string | null
@@ -91,6 +122,20 @@ export interface Project {
   owner_id: number | null
   owner: User | null
   members: User[]
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface Sprint {
+  id: number
+  name: string
+  goal: string | null
+  status: SprintStatus
+  start_date: string | null
+  end_date: string | null
+  project_id: number
+  project: Project | null
+  task_count: number
   created_at: string | null
   updated_at: string | null
 }
@@ -143,43 +188,118 @@ export interface Task {
   id: number
   title: string
   description: string | null
-  status: "todo" | "in_progress" | "done"
-  priority: "low" | "medium" | "high" | "critical"
+  issue_type: TaskIssueType
+  status: TaskStatus
+  priority: TaskPriority
   project_id: number
+  project: Project | null
+  sprint_id: number | null
+  sprint: Sprint | null
   assignee_id: number | null
   creator_id: number
   assignee: User | null
   creator: User | null
-  created_at: string
-  updated_at: string
+  due_date: string | null
+  estimate_minutes: number | null
+  logged_minutes: number
+  comments_count: number
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface TaskCreate {
   title: string
-  description?: string
-  status?: "todo" | "in_progress" | "done"
-  priority?: "low" | "medium" | "high" | "critical"
+  description?: string | null
+  issue_type?: TaskIssueType
+  status?: TaskStatus
+  priority?: TaskPriority
   project_id: number
-  assignee_id?: number
+  sprint_id?: number | null
+  assignee_id?: number | null
+  due_date?: string | null
+  estimate_minutes?: number | null
+  logged_minutes?: number
+}
+
+export interface TaskComment {
+  id: number
+  content: string
+  task_id: number
+  author_id: number | null
+  author: User | null
+  created_at: string | null
 }
 
 // ---- Reports ----
 export interface Report {
   id: number
   content: string
+  yesterday: string | null
+  today: string | null
+  blockers: string | null
+  minutes_spent: number | null
   date: string
   submitter_id: number
   project_id: number | null
   submitter: User | null
   project: Project | null
+  tasks: Task[]
+  attachments: ReportAttachment[]
+  pointers: ReportPointers
   created_at: string
   updated_at: string
 }
 
+export interface ReportAttachment {
+  id: number
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  download_url: string
+  created_at: string | null
+}
+
+export interface ReportPointers {
+  yesterday: string[]
+  today: string[]
+  blockers: string[]
+  content: string[]
+  tasks: string[]
+  attachments: string[]
+  executive: string[]
+}
+
 export interface ReportCreate {
-  content: string
+  content?: string | null
+  yesterday?: string | null
+  today?: string | null
+  blockers?: string | null
+  minutes_spent?: number | null
   date: string
-  project_id?: number
+  project_id?: number | null
+  task_ids?: number[]
+}
+
+export type ReportUpdate = Partial<ReportCreate>
+
+export interface DashboardSummary {
+  role: Role
+  metrics: {
+    projects: number
+    total_tasks: number
+    active_sprints: number
+    overdue_tasks: number
+    blocked_tasks: number
+    reports_today: number
+    missing_reports: number
+  }
+  tasks_by_status: Record<TaskStatus, number>
+  active_sprints: Sprint[]
+  overdue_tasks: Task[]
+  blocked_tasks: Task[]
+  recent_tasks: Task[]
+  recent_reports: Report[]
+  missing_reports: User[]
 }
 
 // ---- Auth ----
@@ -390,12 +510,29 @@ export const sendMessage = (userId: number, content: string) =>
   })
 
 // ---- Tasks ----
-export const listTasks = (projectId?: number) => {
+export interface TaskFilters {
+  projectId?: number
+  sprintId?: number
+  assigneeId?: number
+  status?: TaskStatus
+  priority?: TaskPriority
+  search?: string
+}
+
+export const listTasks = (filters: TaskFilters | number = {}) => {
   const params = new URLSearchParams()
-  if (projectId != null) params.set("project_id", String(projectId))
+  const opts = typeof filters === "number" ? { projectId: filters } : filters
+  if (opts.projectId != null) params.set("project_id", String(opts.projectId))
+  if (opts.sprintId != null) params.set("sprint_id", String(opts.sprintId))
+  if (opts.assigneeId != null) params.set("assignee_id", String(opts.assigneeId))
+  if (opts.status) params.set("status", opts.status)
+  if (opts.priority) params.set("priority", opts.priority)
+  if (opts.search) params.set("search", opts.search)
   const qs = params.toString()
   return request<Task[]>(`/tasks${qs ? `?${qs}` : ""}`)
 }
+
+export const getTask = (id: number) => request<Task>(`/tasks/${id}`)
 
 export const createTask = (data: TaskCreate) =>
   request<Task>("/tasks", { method: "POST", body: JSON.stringify(data) })
@@ -409,13 +546,120 @@ export const updateTask = (id: number, patch: Partial<TaskCreate>) =>
 export const deleteTask = (id: number) =>
   request<void>(`/tasks/${id}`, { method: "DELETE" })
 
-// ---- Reports ----
-export const listReports = (projectId?: number) => {
+export const listTaskComments = (taskId: number) =>
+  request<TaskComment[]>(`/tasks/${taskId}/comments`)
+
+export const addTaskComment = (taskId: number, content: string) =>
+  request<TaskComment>(`/tasks/${taskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  })
+
+// ---- Sprints ----
+export interface SprintCreate {
+  name: string
+  goal?: string | null
+  status?: SprintStatus
+  start_date?: string | null
+  end_date?: string | null
+  project_id: number
+}
+
+export type SprintUpdate = Partial<SprintCreate>
+
+export const listSprints = (opts: { projectId?: number; status?: SprintStatus } = {}) => {
   const params = new URLSearchParams()
-  if (projectId != null) params.set("project_id", String(projectId))
+  if (opts.projectId != null) params.set("project_id", String(opts.projectId))
+  if (opts.status) params.set("status", opts.status)
+  const qs = params.toString()
+  return request<Sprint[]>(`/sprints${qs ? `?${qs}` : ""}`)
+}
+
+export const createSprint = (data: SprintCreate) =>
+  request<Sprint>("/sprints", { method: "POST", body: JSON.stringify(data) })
+
+export const updateSprint = (id: number, data: SprintUpdate) =>
+  request<Sprint>(`/sprints/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
+
+export const deleteSprint = (id: number) =>
+  request<void>(`/sprints/${id}`, { method: "DELETE" })
+
+// ---- Reports ----
+export const listReports = (opts: { projectId?: number; submitterId?: number; dateFrom?: string; dateTo?: string } | number = {}) => {
+  const params = new URLSearchParams()
+  const filters = typeof opts === "number" ? { projectId: opts } : opts
+  if (filters.projectId != null) params.set("project_id", String(filters.projectId))
+  if (filters.submitterId != null) params.set("submitter_id", String(filters.submitterId))
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom)
+  if (filters.dateTo) params.set("date_to", filters.dateTo)
   const qs = params.toString()
   return request<Report[]>(`/reports${qs ? `?${qs}` : ""}`)
 }
 
-export const createReport = (data: ReportCreate) =>
-  request<Report>("/reports", { method: "POST", body: JSON.stringify(data) })
+export const createReport = (data: ReportCreate, attachments: File[] = []) => {
+  if (attachments.length === 0) {
+    return request<Report>("/reports", { method: "POST", body: JSON.stringify(data) })
+  }
+
+  const formData = new FormData()
+  formData.append("payload", JSON.stringify(data))
+  attachments.forEach((file) => formData.append("attachments", file))
+  return requestMultipart<Report>("/reports", formData, { method: "POST" })
+}
+
+export const updateReport = (id: number, data: ReportUpdate, attachments: File[] = []) => {
+  if (attachments.length === 0) {
+    return request<Report>(`/reports/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    })
+  }
+
+  const formData = new FormData()
+  formData.append("payload", JSON.stringify(data))
+  attachments.forEach((file) => formData.append("attachments", file))
+  return requestMultipart<Report>(`/reports/${id}`, formData, { method: "PATCH" })
+}
+
+export const deleteReport = (id: number) =>
+  request<void>(`/reports/${id}`, { method: "DELETE" })
+
+export const deleteReportAttachment = (reportId: number, attachmentId: number) =>
+  request<void>(`/reports/${reportId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+  })
+
+export async function downloadReportAttachment(reportId: number, attachment: ReportAttachment) {
+  const token = getToken()
+  const res = await fetch(`${API_URL}/reports/${reportId}/attachments/${attachment.id}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const payload = await res.json()
+      detail = payload.detail ?? detail
+    } catch {
+      /* ignore */
+    }
+    throw new Error(typeof detail === "string" ? detail : "Download failed")
+  }
+
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = attachment.file_name
+  link.rel = "noreferrer"
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+// ---- Dashboard ----
+export const getDashboardSummary = () => request<DashboardSummary>("/dashboard/summary")

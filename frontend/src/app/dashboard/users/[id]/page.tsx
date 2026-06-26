@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
+  Hash,
   Mail,
   Power,
   RefreshCcw,
@@ -79,8 +80,11 @@ const priorityStyles = {
 }
 
 const taskStatusStyles = {
+  backlog: "bg-slate-100 text-slate-600",
   todo: "bg-slate-100 text-slate-600",
   in_progress: "bg-blue-100 text-blue-700",
+  in_review: "bg-indigo-100 text-indigo-700",
+  blocked: "bg-red-100 text-red-700",
   done: "bg-emerald-100 text-emerald-700",
 }
 
@@ -118,7 +122,9 @@ function normalizeNullable(value: string) {
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const id = Number(params.id)
+  const startEdit = searchParams.get("edit") === "1"
 
   const { user: me } = useAuth()
   const [detail, setDetail] = useState<UserDetail | null>(null)
@@ -258,6 +264,9 @@ export default function UserDetailPage() {
               >
                 {detail.is_active ? "active" : "disabled"}
               </Badge>
+              <Badge className="border-none bg-slate-100 text-slate-600">
+                Employee #{detail.employee_id}
+              </Badge>
               {detail.onboarding_pending && (
                 <Badge className={`border-none capitalize ${statusStyles.pending}`}>
                   onboarding pending
@@ -283,6 +292,7 @@ export default function UserDetailPage() {
                 viewer={me}
                 target={detail}
                 onSaved={applyMutation}
+                startOpen={startEdit}
               />
             )}
             {detail.onboarding_pending && canEditTarget && (
@@ -375,6 +385,7 @@ export default function UserDetailPage() {
               </CardHeader>
               <CardContent className="space-y-4 pt-4 text-sm">
                 <Field label="Email" value={detail.email} icon={Mail} />
+                <Field label="Employee ID" value={`#${detail.employee_id}`} icon={Hash} />
                 <Field label="Department" value={detail.department ?? "Not set"} icon={Building2} />
                 <Field
                   label="Role"
@@ -785,12 +796,14 @@ function EditUserDialog({
   viewer,
   target,
   onSaved,
+  startOpen = false,
 }: {
   viewer: User | null
   target: UserDetail
   onSaved: (updated: UserUpdateResult) => void
+  startOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(startOpen)
   const [email, setEmail] = useState(target.email)
   const [fullName, setFullName] = useState(target.full_name ?? "")
   const [department, setDepartment] = useState(target.department ?? "")

@@ -1,140 +1,509 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
-  listReports,
-  listProjects,
   createReport,
+  deleteReport,
+  deleteReportAttachment,
+  downloadReportAttachment,
+  listProjects,
+  listReports,
+  listTasks,
+  updateReport,
+  type Project,
   type Report,
-  type Project
+  type ReportAttachment,
+  type Task,
 } from "@/lib/api"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { useAuth } from "@/lib/auth-context"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus } from "lucide-react"
+import {
+  CalendarDays,
+  CheckSquare,
+  Clock3,
+  Download,
+  Edit3,
+  FileText,
+  Paperclip,
+  Plus,
+  ShieldAlert,
+  Trash2,
+  Upload,
+} from "lucide-react"
+
+const ACCEPTED_FILES = ".pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx,.csv,.md"
+
+function todayInput() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function dateInput(value: string | null | undefined) {
+  if (!value) return todayInput()
+  return new Date(value).toISOString().slice(0, 10)
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
+}
 
 export default function ReportsPage() {
+  const { user } = useAuth()
+  const role = user?.role ?? "employee"
+  const canManageAll = role === "ceo" || role === "super_admin"
+
   const [reports, setReports] = useState<Report[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [projectFilter, setProjectFilter] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
-    Promise.all([listReports(), listProjects()])
-      .then(([r, p]) => {
-        setReports(r)
-        setProjects(p)
+    setError(null)
+    Promise.all([
+      listReports(projectFilter ? { projectId: Number(projectFilter) } : {}),
+      listProjects(),
+      listTasks(projectFilter ? { projectId: Number(projectFilter) } : {}),
+    ])
+      .then(([reportData, projectData, taskData]) => {
+        setReports(reportData)
+        setProjects(projectData)
+        setTasks(taskData)
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load reports"))
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load daily updates"))
       .finally(() => setLoading(false))
-  }, [])
+  }, [projectFilter])
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      load()
-    }, 0)
+    const timer = setTimeout(load, 0)
     return () => clearTimeout(timer)
   }, [load])
 
+  const totals = useMemo(() => {
+    const today = todayInput()
+    return {
+      todayReports: reports.filter((report) => dateInput(report.date) === today).length,
+      blockers: reports.filter((report) => report.blockers?.trim()).length,
+      minutes: reports.reduce((sum, report) => sum + (report.minutes_spent ?? 0), 0),
+      attachments: reports.reduce((sum, report) => sum + report.attachments.length, 0),
+    }
+  }, [reports])
+
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-end justify-between">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Daily Reports</h1>
-          <p className="text-slate-500">Track daily progress and updates from your team.</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Daily updates</h1>
+          <p className="text-slate-500">Structured progress, blockers, time, linked tasks, and uploaded documents.</p>
         </div>
-        <ReportDialog onSaved={load} projects={projects} />
+        <ReportDialog mode="create" projects={projects} tasks={tasks} onSaved={load} />
       </div>
 
-      {error ? (
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Reports" value={reports.length} icon={FileText} />
+        <Metric label="Today" value={totals.todayReports} icon={CalendarDays} />
+        <Metric label="Blockers" value={totals.blockers} icon={ShieldAlert} tone="red" />
+        <Metric label="Minutes logged" value={totals.minutes} icon={Clock3} tone="green" />
+      </div>
+
+      <Card className="glass border-none">
+        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 md:w-72"
+          >
+            <option value="">All projects</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <div className="text-sm text-slate-400">
+            {loading ? "Syncing..." : `${reports.length} updates visible · ${totals.attachments} attachments`}
+          </div>
+        </CardContent>
+      </Card>
+
+      {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
-      ) : loading ? (
-        <div className="text-sm text-slate-500">Loading reports…</div>
+      )}
+
+      {loading ? (
+        <div className="text-sm text-slate-500">Loading reports...</div>
       ) : reports.length === 0 ? (
-        <div className="text-sm text-slate-500">No reports found.</div>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
+          No daily updates found.
+        </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {reports.map((r) => (
-            <motion.div key={r.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base text-slate-900">
-                      {new Date(r.date).toLocaleDateString()}
-                    </CardTitle>
-                    <div className="text-xs font-medium text-slate-500">
-                      {r.submitter?.full_name ?? r.submitter?.email ?? "Unknown"}
-                    </div>
-                  </div>
-                  <CardDescription className="text-slate-500">
-                    {r.project?.name ?? "General Update"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-1 flex-col">
-                  <p className="whitespace-pre-wrap text-sm text-slate-700">
-                    {r.content}
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+        <div className="grid gap-4 xl:grid-cols-2">
+          {reports.map((report) => {
+            const canEdit =
+              canManageAll ||
+              report.submitter_id === user?.id ||
+              (role === "manager" && Boolean(report.project))
+
+            return (
+              <ReportCard
+                key={report.id}
+                report={report}
+                projects={projects}
+                tasks={tasks}
+                canEdit={canEdit}
+                onSaved={load}
+              />
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
-function ReportDialog({ 
-  projects, 
-  onSaved 
-}: { 
-  projects: Project[], 
-  onSaved: () => void 
+function Metric({
+  label,
+  value,
+  icon: Icon,
+  tone = "blue",
+}: {
+  label: string
+  value: number
+  icon: typeof FileText
+  tone?: "blue" | "red" | "green"
+}) {
+  const tones = {
+    blue: "bg-blue-50 text-blue-700",
+    red: "bg-red-50 text-red-700",
+    green: "bg-emerald-50 text-emerald-700",
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">{label}</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
+        </div>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone]}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReportCard({
+  report,
+  projects,
+  tasks,
+  canEdit,
+  onSaved,
+}: {
+  report: Report
+  projects: Project[]
+  tasks: Task[]
+  canEdit: boolean
+  onSaved: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [busyAttachmentId, setBusyAttachmentId] = useState<number | null>(null)
+
+  const handleDelete = async () => {
+    if (!confirm("Delete this daily update?")) return
+    try {
+      await deleteReport(report.id)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete report")
+    }
+  }
+
+  const handleDownload = async (attachment: ReportAttachment) => {
+    try {
+      setBusyAttachmentId(attachment.id)
+      await downloadReportAttachment(report.id, attachment)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to download attachment")
+    } finally {
+      setBusyAttachmentId(null)
+    }
+  }
+
+  const handleDeleteAttachment = async (attachment: ReportAttachment) => {
+    if (!confirm(`Remove ${attachment.file_name}?`)) return
+    try {
+      setBusyAttachmentId(attachment.id)
+      await deleteReportAttachment(report.id, attachment.id)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove attachment")
+    } finally {
+      setBusyAttachmentId(null)
+    }
+  }
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className="glass h-full border-none">
+        <CardHeader className="border-b border-slate-100 pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base text-slate-900">{formatDate(report.date)}</CardTitle>
+              <CardDescription className="mt-1 text-slate-500">
+                {report.submitter?.full_name ?? report.submitter?.email ?? "Unknown"} · {report.project?.name ?? "General"}
+              </CardDescription>
+            </div>
+            {canEdit && (
+              <div className="flex gap-1">
+                <ReportDialog mode="edit" report={report} projects={projects} tasks={tasks} onSaved={onSaved} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDelete}
+                  className="h-8 w-8 cursor-pointer text-slate-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4 pt-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <PointerPanel label="Yesterday" items={report.pointers.yesterday} fallback={report.yesterday ?? "No details provided"} />
+            <PointerPanel label="Today" items={report.pointers.today} fallback={report.today ?? "Not provided"} />
+            <PointerPanel
+              label="Blockers"
+              items={report.pointers.blockers}
+              fallback={report.blockers?.trim() ? report.blockers : "No blockers"}
+              danger
+            />
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Executive pointers</p>
+            {report.pointers.executive.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-400">No extracted pointers yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {report.pointers.executive.map((item) => (
+                  <li key={item} className="flex gap-2 text-sm leading-6 text-slate-700">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="border-none bg-emerald-100 text-emerald-700">{report.minutes_spent ?? 0} min</Badge>
+            <Badge className="border-none bg-slate-100 text-slate-600">{report.tasks.length} linked tasks</Badge>
+            <Badge className="border-none bg-indigo-100 text-indigo-700">{report.attachments.length} files</Badge>
+          </div>
+
+          {report.tasks.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Linked tasks</p>
+              <div className="flex flex-wrap gap-2">
+                {report.tasks.map((task) => (
+                  <Badge key={task.id} className="border-none bg-slate-100 text-slate-600">
+                    <CheckSquare className="mr-1 h-3 w-3" />
+                    {task.title}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {report.attachments.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Attachments</p>
+              <div className="space-y-2">
+                {report.attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-800">{attachment.file_name}</p>
+                      <p className="text-xs text-slate-400">
+                        {attachment.mime_type} · {formatBytes(attachment.size_bytes)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDownload(attachment)}
+                        className="h-8 w-8 cursor-pointer text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                        disabled={busyAttachmentId === attachment.id}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteAttachment(attachment)}
+                          className="h-8 w-8 cursor-pointer text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          disabled={busyAttachmentId === attachment.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+function PointerPanel({
+  label,
+  items,
+  fallback,
+  danger = false,
+}: {
+  label: string
+  items: string[]
+  fallback: string
+  danger?: boolean
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      {items.length === 0 ? (
+        <p className={`mt-2 text-sm leading-6 ${danger ? "text-red-700" : "text-slate-700"}`}>{fallback}</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {items.slice(0, 4).map((item) => (
+            <li key={item} className="flex gap-2 text-sm leading-6 text-slate-700">
+              <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${danger ? "bg-red-500" : "bg-primary"}`} />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function ReportDialog({
+  mode,
+  report,
+  projects,
+  tasks,
+  onSaved,
+}: {
+  mode: "create" | "edit"
+  report?: Report
+  projects: Project[]
+  tasks: Task[]
+  onSaved: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const [content, setContent] = useState("")
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-  const [projectId, setProjectId] = useState<string>("")
-  
+  const [date, setDate] = useState(dateInput(report?.date))
+  const [projectId, setProjectId] = useState(report?.project_id ? String(report.project_id) : "")
+  const [yesterday, setYesterday] = useState(report?.yesterday ?? "")
+  const [today, setToday] = useState(report?.today ?? "")
+  const [blockers, setBlockers] = useState(report?.blockers ?? "")
+  const [minutes, setMinutes] = useState(report?.minutes_spent != null ? String(report.minutes_spent) : "")
+  const [taskIds, setTaskIds] = useState<number[]>(report?.tasks.map((task) => task.id) ?? [])
+  const [attachments, setAttachments] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(() => {
+      setDate(dateInput(report?.date))
+      setProjectId(report?.project_id ? String(report.project_id) : "")
+      setYesterday(report?.yesterday ?? "")
+      setToday(report?.today ?? "")
+      setBlockers(report?.blockers ?? "")
+      setMinutes(report?.minutes_spent != null ? String(report.minutes_spent) : "")
+      setTaskIds(report?.tasks.map((task) => task.id) ?? [])
+      setAttachments([])
+      setErr(null)
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [open, report])
+
+  const availableTasks = useMemo(
+    () => tasks.filter((task) => !projectId || task.project_id === Number(projectId)),
+    [projectId, tasks],
+  )
+
+  const toggleTask = (taskId: number) => {
+    setTaskIds((current) =>
+      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    )
+  }
+
   const submit = async () => {
-    if (!content.trim() || !date) {
-      setErr("Content and date are required")
+    if (!yesterday.trim() && !today.trim() && !blockers.trim()) {
+      setErr("Add at least one update field")
       return
     }
+
     setBusy(true)
     setErr(null)
+
+    const payload = {
+      date,
+      project_id: projectId ? Number(projectId) : null,
+      yesterday: yesterday.trim() || null,
+      today: today.trim() || null,
+      blockers: blockers.trim() || null,
+      minutes_spent: minutes ? Number(minutes) : null,
+      task_ids: taskIds,
+    }
+
     try {
-      await createReport({
-        content,
-        date: new Date(date).toISOString(),
-        project_id: projectId ? Number(projectId) : undefined
-      })
+      if (mode === "create") {
+        await createReport(payload, attachments)
+      } else if (report) {
+        await updateReport(report.id, payload, attachments)
+      }
       setOpen(false)
-      setContent("")
-      setProjectId("")
-      setDate(new Date().toISOString().split('T')[0])
       onSaved()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to create report")
+      setErr(e instanceof Error ? e.message : "Failed to save report")
     } finally {
       setBusy(false)
     }
@@ -144,65 +513,155 @@ function ReportDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button className="gap-2 bg-primary text-white hover:bg-primary/90 cursor-pointer">
-            <Plus className="h-4 w-4" /> New Report
-          </Button>
+          mode === "create" ? (
+            <Button className="gap-2 bg-primary text-white hover:bg-primary/90 cursor-pointer">
+              <Plus className="h-4 w-4" />
+              New update
+            </Button>
+          ) : (
+            <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer text-slate-400">
+              <Edit3 className="h-4 w-4" />
+            </Button>
+          )
         }
       />
-      <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+      <DialogContent className="max-h-[92vh] overflow-y-auto border-slate-200 bg-white text-slate-900 sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Submit Daily Report</DialogTitle>
+          <DialogTitle>{mode === "create" ? "Submit daily update" : "Edit daily update"}</DialogTitle>
           <DialogDescription>
-            Share your progress, blockers, and plans for tomorrow.
+            Capture finished work, today&apos;s plan, blockers, time, tasks, and uploaded documents.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label className="text-slate-700">Date</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="border-slate-200 bg-slate-50"
-            />
+            <Label>Date</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border-slate-200 bg-slate-50" />
           </div>
           <div className="space-y-2">
-            <Label className="text-slate-700">Project (Optional)</Label>
+            <Label>Project</Label>
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
             >
-              <option value="">General (No specific project)</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="">General</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="space-y-4">
+          <TextBlock label="Yesterday" value={yesterday} onChange={setYesterday} placeholder="What did you finish?" />
+          <TextBlock label="Today" value={today} onChange={setToday} placeholder="What are you doing next?" />
+          <TextBlock label="Blockers" value={blockers} onChange={setBlockers} placeholder="Anything stuck, waiting, or risky?" />
+
           <div className="space-y-2">
-            <Label className="text-slate-700">Content</Label>
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="- Completed X&#10;- Blocked by Y&#10;- Planning to do Z"
-              className="min-h-[150px] border-slate-200 bg-slate-50"
+            <Label>Minutes spent</Label>
+            <Input
+              type="number"
+              min="0"
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+              className="border-slate-200 bg-slate-50 md:w-48"
             />
           </div>
-          {err && <p className="text-sm text-red-600">{err}</p>}
+
+          <div className="space-y-2">
+            <Label>Linked tasks</Label>
+            <div className="grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-2">
+              {availableTasks.length === 0 ? (
+                <p className="px-2 py-3 text-sm text-slate-400">No visible tasks for this project.</p>
+              ) : (
+                availableTasks.map((task) => (
+                  <label
+                    key={task.id}
+                    className="flex cursor-pointer items-start gap-2 rounded-xl bg-white px-3 py-2 text-sm text-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={taskIds.includes(task.id)}
+                      onChange={() => toggleTask(task.id)}
+                      className="mt-1"
+                    />
+                    <span>{task.title}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Upload documents</Label>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-500">
+                  <Upload className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Input
+                    type="file"
+                    multiple
+                    accept={ACCEPTED_FILES}
+                    onChange={(e) => setAttachments(Array.from(e.target.files ?? []))}
+                    className="border-slate-200 bg-white"
+                  />
+                  <p className="text-xs text-slate-400">
+                    Add PDF, Word, spreadsheet, text, or presentation files. Files are stored in Postgres and can be downloaded later.
+                  </p>
+                  {attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {attachments.map((file) => (
+                        <Badge key={`${file.name}-${file.size}`} className="border-none bg-slate-100 text-slate-600">
+                          <Paperclip className="mr-1 h-3 w-3" />
+                          {file.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {err && <p className="text-sm text-red-600">{err}</p>}
+
         <DialogFooter>
-          <DialogClose
-            render={
-              <Button variant="ghost" className="text-slate-500 cursor-pointer">
-                Cancel
-              </Button>
-            }
-          />
-          <Button onClick={submit} disabled={busy} className="bg-primary text-white hover:bg-primary/90 cursor-pointer">
-            {busy ? "Submitting…" : "Submit Report"}
+          <DialogClose render={<Button variant="ghost" className="cursor-pointer text-slate-500">Cancel</Button>} />
+          <Button onClick={submit} disabled={busy} className="cursor-pointer bg-primary text-white hover:bg-primary/90">
+            {busy ? "Saving..." : "Save update"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TextBlock({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-h-24 border-slate-200 bg-slate-50"
+      />
+    </div>
   )
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { useAuth } from "@/lib/auth-context"
@@ -26,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getAppBaseUrl } from "@/lib/site"
-import { Trash2, UserPlus } from "lucide-react"
+import { Eye, Pencil, Trash2, UserPlus } from "lucide-react"
 
 export default function UsersPage() {
   const { user } = useAuth()
@@ -35,6 +36,7 @@ export default function UsersPage() {
   // Only super_admin, ceo, manager can view users (per backend).
   // Only super_admin, ceo can create/delete.
   const canManage = role === "ceo" || role === "super_admin"
+  const canOpenProfiles = canManage
 
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +51,10 @@ export default function UsersPage() {
   }, [])
 
   useEffect(() => {
-    load()
+    const timer = setTimeout(() => {
+      load()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [load])
 
   const handleDelete = async (targetId: number) => {
@@ -101,15 +106,37 @@ export default function UsersPage() {
                       </Badge>
                     </div>
                     <CardDescription className="text-slate-500">
-                      {u.email}
+                      {u.email} · Employee #{u.employee_id}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="flex items-center justify-between mt-auto pt-2">
-                    <span className="text-xs text-slate-400">{u.department ?? "No department"}</span>
+                  <CardContent className="mt-auto space-y-3 pt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-400">{u.department ?? "No department"}</span>
+                      {canOpenProfiles && (
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/dashboard/users/${u.id}`}
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View
+                          </Link>
+                          <Link
+                            href={`/dashboard/users/${u.id}?edit=1`}
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </Link>
+                        </div>
+                      )}
+                    </div>
                     {canDelete && (
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(u.id)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 cursor-pointer">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(u.id)} className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     )}
                   </CardContent>
                 </Card>

@@ -163,6 +163,7 @@ export default function MessagesPage() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [active, setActive] = useState<User | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [messageFileUrls, setMessageFileUrls] = useState<Record<number, string[]>>({})
   const [draft, setDraft] = useState("")
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sending, setSending] = useState(false)
@@ -181,9 +182,11 @@ export default function MessagesPage() {
 
   // Revoke all cached object URLs on unmount
   useEffect(() => {
+    const fileCache = fileCacheRef
+    const pendingUrls = pendingUrlsRef
     return () => {
-      fileCacheRef.current.forEach((urls) => urls.forEach((u) => URL.revokeObjectURL(u)))
-      pendingUrlsRef.current.forEach((u) => URL.revokeObjectURL(u))
+      fileCache.current.forEach((urls) => urls.forEach((u) => URL.revokeObjectURL(u)))
+      pendingUrls.current.forEach((u) => URL.revokeObjectURL(u))
     }
   }, [])
 
@@ -256,6 +259,7 @@ export default function MessagesPage() {
       // Link the object URLs to this message ID for in-session preview
       if (pendingUrlsRef.current.length > 0) {
         fileCacheRef.current.set(m.id, pendingUrlsRef.current)
+        setMessageFileUrls((prev) => ({ ...prev, [m.id]: pendingUrlsRef.current }))
         pendingUrlsRef.current = []
       }
       setMessages((prev) => [...prev, m])
@@ -273,7 +277,11 @@ export default function MessagesPage() {
   const toggleProject = (id: number) =>
     setExpanded((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
       return next
     })
 
@@ -438,7 +446,7 @@ export default function MessagesPage() {
                 <div className="space-y-3">
                   {messages.map((m) => {
                     const mine = me?.id === m.sender_id
-                    const fileUrls = fileCacheRef.current.get(m.id) ?? []
+                    const fileUrls = messageFileUrls[m.id] ?? []
                     return (
                       <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                         <div

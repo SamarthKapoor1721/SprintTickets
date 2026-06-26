@@ -25,6 +25,57 @@ export function canManageTask(currentUser: { id: number; role: UserRole }, proje
   return currentUser.id === projectOwnerId;
 }
 
+export function projectAccessWhere(currentUser: { id: number; role: UserRole }) {
+  if (hasMinimumRole(currentUser.role, UserRole.ceo)) {
+    return {};
+  }
+
+  return {
+    OR: [
+      { ownerId: currentUser.id },
+      { memberships: { some: { userId: currentUser.id } } },
+    ],
+  };
+}
+
+export function taskAccessWhere(currentUser: { id: number; role: UserRole }) {
+  if (hasMinimumRole(currentUser.role, UserRole.ceo)) {
+    return {};
+  }
+
+  if (currentUser.role === UserRole.manager) {
+    return {
+      project: projectAccessWhere(currentUser),
+    };
+  }
+
+  return {
+    OR: [
+      { assigneeId: currentUser.id },
+      { creatorId: currentUser.id },
+      { project: { memberships: { some: { userId: currentUser.id } } } },
+      { project: { ownerId: currentUser.id } },
+    ],
+  };
+}
+
+export function reportAccessWhere(currentUser: { id: number; role: UserRole }) {
+  if (hasMinimumRole(currentUser.role, UserRole.ceo)) {
+    return {};
+  }
+
+  if (currentUser.role === UserRole.manager) {
+    return {
+      OR: [
+        { submitterId: currentUser.id },
+        { project: projectAccessWhere(currentUser) },
+      ],
+    };
+  }
+
+  return { submitterId: currentUser.id };
+}
+
 export function canManageUser(currentUserRole: UserRole, targetUserRole: UserRole): boolean {
   if (currentUserRole === UserRole.super_admin) return true;
   if (currentUserRole === UserRole.ceo && (targetUserRole === UserRole.manager || targetUserRole === UserRole.employee)) return true;
