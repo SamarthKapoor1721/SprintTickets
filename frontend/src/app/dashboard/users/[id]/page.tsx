@@ -58,6 +58,7 @@ import {
   type UserUpdateResult,
 } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { TEAMS } from "@/lib/teams"
 
 const roleStyles: Record<Role, string> = {
   super_admin: "bg-slate-900 text-white",
@@ -902,12 +903,17 @@ function EditUserDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-slate-700">Department</Label>
-              <Input
+              <Label className="text-slate-700">Team</Label>
+              <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="border-slate-200 bg-slate-50"
-              />
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+              >
+                <option value="">Select team…</option>
+                {TEAMS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
             </div>
           </div>
 

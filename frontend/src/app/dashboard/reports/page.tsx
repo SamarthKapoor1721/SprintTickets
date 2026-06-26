@@ -7,6 +7,7 @@ import {
   deleteReport,
   deleteReportAttachment,
   downloadReportAttachment,
+  getAISummary,
   listProjects,
   listReports,
   listTasks,
@@ -43,8 +44,10 @@ import {
   Paperclip,
   Plus,
   ShieldAlert,
+  Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react"
 
 const ACCEPTED_FILES = ".pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx,.csv,.md"
@@ -71,7 +74,7 @@ function formatBytes(bytes: number) {
 export default function ReportsPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
-  const canManageAll = role === "ceo" || role === "super_admin"
+  const canSummarize = role === "ceo" || role === "super_admin" || role === "manager"
 
   const [reports, setReports] = useState<Report[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -79,6 +82,34 @@ export default function ReportsPage() {
   const [projectFilter, setProjectFilter] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiText, setAiText] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null)
+
+  const fetchSummary = async () => {
+    setAiOpen(true)
+    if (aiText) return // use cached until dismissed
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const result = await getAISummary()
+      setAiText(result.summary)
+      setAiGeneratedAt(result.generated_at)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Failed to generate summary")
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const dismissAi = () => {
+    setAiOpen(false)
+    setAiText(null)
+    setAiGeneratedAt(null)
+    setAiError(null)
+  }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -119,8 +150,70 @@ export default function ReportsPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Daily updates</h1>
           <p className="text-slate-500">Structured progress, blockers, time, linked tasks, and uploaded documents.</p>
         </div>
-        <ReportDialog mode="create" projects={projects} tasks={tasks} onSaved={load} />
+        <div className="flex items-center gap-2">
+          {canSummarize && (
+            <Button
+              onClick={fetchSummary}
+              variant="outline"
+              className="gap-2 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4" />
+              AI Summary
+            </Button>
+          )}
+          <ReportDialog mode="create" projects={projects} tasks={tasks} onSaved={load} />
+        </div>
       </div>
+
+      {/* AI Summary panel */}
+      {aiOpen && (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-violet-600" />
+              <span className="text-[13.5px] font-semibold text-violet-900">AI Executive Summary</span>
+              {aiGeneratedAt && (
+                <span className="text-[11px] text-violet-500">
+                  · {new Date(aiGeneratedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+            </div>
+            <button onClick={dismissAi} className="rounded-lg p-1 text-violet-400 hover:bg-violet-100 hover:text-violet-700 cursor-pointer">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {aiLoading ? (
+            <div className="flex items-center gap-2 py-4 text-[13px] text-violet-600">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+              Analysing reviews, reports, and tasks…
+            </div>
+          ) : aiError ? (
+            <p className="text-sm text-red-600">{aiError}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none text-slate-800">
+              {aiText?.split("\n").map((line, i) => {
+                const bold = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                if (line.startsWith("## ") || line.startsWith("# ")) {
+                  return <h3 key={i} className="mt-3 text-[13.5px] font-semibold text-violet-900" dangerouslySetInnerHTML={{ __html: bold.replace(/^#{1,3} /, "") }} />
+                }
+                if (line.startsWith("- ") || line.startsWith("* ")) {
+                  return <p key={i} className="ml-3 text-[13px] leading-relaxed text-slate-700" dangerouslySetInnerHTML={{ __html: `• ${bold.slice(2)}` }} />
+                }
+                if (!line.trim()) return <div key={i} className="h-1" />
+                return <p key={i} className="text-[13px] leading-relaxed text-slate-700" dangerouslySetInnerHTML={{ __html: bold }} />
+              })}
+            </div>
+          )}
+          {aiText && (
+            <button
+              onClick={() => { setAiText(null); setAiGeneratedAt(null); fetchSummary() }}
+              className="mt-3 flex items-center gap-1.5 text-[12px] text-violet-500 hover:text-violet-700 cursor-pointer"
+            >
+              <Sparkles className="h-3 w-3" /> Regenerate
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Reports" value={reports.length} icon={FileText} />
@@ -164,10 +257,9 @@ export default function ReportsPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {reports.map((report) => {
-            const canEdit =
-              canManageAll ||
-              report.submitter_id === user?.id ||
-              (role === "manager" && Boolean(report.project))
+            // Only the original submitter can edit or delete their own report.
+            // CEO/manager/super_admin are read-only reviewers.
+            const canEdit = report.submitter_id === user?.id
 
             return (
               <ReportCard
