@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, ChevronRight, Crown, Edit3, Trash2, UserPlus, X } from "lucide-react"
+import { ArrowLeft, CalendarDays, ChevronRight, Crown, Edit3, Trash2, UserPlus, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,15 +23,20 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   addMember,
+  createSprint,
+  deleteSprint,
   deleteProject,
   getProject,
   listMembers,
   listReviews,
+  listSprints,
   listUsers,
   removeMember,
+  updateSprint,
   updateProject,
   type Project,
   type Review,
+  type Sprint,
   type User,
 } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
@@ -46,6 +51,11 @@ const reviewStatusStyles: Record<string, string> = {
   approved: "bg-emerald-100 text-emerald-700",
   rejected: "bg-red-100 text-red-700",
   needs_changes: "bg-orange-100 text-orange-700",
+}
+const sprintStatusStyles: Record<string, string> = {
+  planned: "bg-slate-100 text-slate-600",
+  active: "bg-emerald-100 text-emerald-700",
+  completed: "bg-blue-100 text-blue-700",
 }
 
 function initials(u: User) {
@@ -73,6 +83,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [members, setMembers] = useState<User[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
+  const [sprints, setSprints] = useState<Sprint[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
   const { user } = useAuth()
   const role = user?.role ?? "employee"
@@ -82,11 +93,12 @@ export default function ProjectDetailPage() {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
-    Promise.all([getProject(id), listMembers(id), listReviews({ projectId: id })])
-      .then(([p, m, r]) => {
+    Promise.all([getProject(id), listMembers(id), listReviews({ projectId: id }), listSprints({ projectId: id })])
+      .then(([p, m, r, s]) => {
         setProject(p)
         setMembers(m)
         setReviews(r)
+        setSprints(s)
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load project"))
       .finally(() => setLoading(false))
@@ -369,6 +381,45 @@ export default function ProjectDetailPage() {
         </CardContent>
       </Card>
 
+      <Card className="glass border-none">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle className="text-lg text-slate-900">Sprints</CardTitle>
+              <CardDescription className="text-slate-500">
+                Plan delivery cycles and attach tasks to active work.
+              </CardDescription>
+            </div>
+            {canManage && (
+              <SprintDialog
+                mode="create"
+                projectId={id}
+                onSaved={load}
+              />
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {sprints.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+              No sprints yet.
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {sprints.map((sprint) => (
+                <SprintCard
+                  key={sprint.id}
+                  sprint={sprint}
+                  projectId={id}
+                  canManage={canManage}
+                  onSaved={load}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Reviews for this project */}
       <Card className="glass border-none">
         <CardHeader className="border-b border-slate-100 pb-3">
@@ -644,6 +695,237 @@ function ManageLeadDialog({
             className="bg-primary text-white hover:bg-primary/90 cursor-pointer"
           >
             {busy ? "Saving…" : "Save lead"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function formatSprintDate(value: string | null) {
+  if (!value) return "Not set"
+  return new Date(value).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+}
+
+function sprintDateInput(value: string | null) {
+  if (!value) return ""
+  return new Date(value).toISOString().slice(0, 10)
+}
+
+function SprintCard({
+  sprint,
+  projectId,
+  canManage,
+  onSaved,
+}: {
+  sprint: Sprint
+  projectId: number
+  canManage: boolean
+  onSaved: () => void
+}) {
+  const [err, setErr] = useState<string | null>(null)
+  const handleStatus = async (status: Sprint["status"]) => {
+    try {
+      await updateSprint(sprint.id, { status })
+      onSaved()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to update sprint")
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${sprint.name}? Tasks will move out of this sprint.`)) return
+    try {
+      await deleteSprint(sprint.id)
+      onSaved()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to delete sprint")
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-medium text-slate-900">{sprint.name}</h3>
+            <Badge className={`border-none capitalize ${sprintStatusStyles[sprint.status] ?? ""}`}>
+              {sprint.status}
+            </Badge>
+          </div>
+          <p className="line-clamp-2 text-sm text-slate-500">{sprint.goal ?? "No sprint goal set."}</p>
+        </div>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-1">
+            <SprintDialog mode="edit" sprint={sprint} projectId={projectId} onSaved={onSaved} />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleDelete}
+              className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+      <div className="mt-4 grid gap-2 text-xs text-slate-500 md:grid-cols-3">
+        <span className="flex items-center gap-1">
+          <CalendarDays className="h-3.5 w-3.5" />
+          {formatSprintDate(sprint.start_date)}
+        </span>
+        <span>Ends {formatSprintDate(sprint.end_date)}</span>
+        <span>{sprint.task_count} task{sprint.task_count === 1 ? "" : "s"}</span>
+      </div>
+      {canManage && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleStatus("planned")}
+            className="h-8 border-slate-200 bg-white text-xs text-slate-600 cursor-pointer"
+          >
+            Plan
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleStatus("active")}
+            className="h-8 border-slate-200 bg-white text-xs text-emerald-700 cursor-pointer"
+          >
+            Activate
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleStatus("completed")}
+            className="h-8 border-slate-200 bg-white text-xs text-blue-700 cursor-pointer"
+          >
+            Complete
+          </Button>
+        </div>
+      )}
+      {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
+    </div>
+  )
+}
+
+function SprintDialog({
+  mode,
+  sprint,
+  projectId,
+  onSaved,
+}: {
+  mode: "create" | "edit"
+  sprint?: Sprint
+  projectId: number
+  onSaved: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(sprint?.name ?? "")
+  const [goal, setGoal] = useState(sprint?.goal ?? "")
+  const [status, setStatus] = useState<Sprint["status"]>(sprint?.status ?? "planned")
+  const [startDate, setStartDate] = useState(sprintDateInput(sprint?.start_date ?? null))
+  const [endDate, setEndDate] = useState(sprintDateInput(sprint?.end_date ?? null))
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(() => {
+      setName(sprint?.name ?? "")
+      setGoal(sprint?.goal ?? "")
+      setStatus(sprint?.status ?? "planned")
+      setStartDate(sprintDateInput(sprint?.start_date ?? null))
+      setEndDate(sprintDateInput(sprint?.end_date ?? null))
+      setErr(null)
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [open, sprint])
+
+  const submit = async () => {
+    if (!name.trim()) {
+      setErr("Sprint name is required")
+      return
+    }
+    setBusy(true)
+    setErr(null)
+    try {
+      const payload = {
+        name: name.trim(),
+        goal: goal.trim() || null,
+        status,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        project_id: projectId,
+      }
+      if (mode === "create") {
+        await createSprint(payload)
+      } else if (sprint) {
+        await updateSprint(sprint.id, payload)
+      }
+      setOpen(false)
+      onSaved()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save sprint")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          mode === "create" ? (
+            <Button className="gap-2 bg-primary text-white hover:bg-primary/90 cursor-pointer">
+              <CalendarDays className="h-4 w-4" />
+              New sprint
+            </Button>
+          ) : (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 cursor-pointer">
+              <Edit3 className="h-4 w-4" />
+            </Button>
+          )
+        }
+      />
+      <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{mode === "create" ? "Create sprint" : "Edit sprint"}</DialogTitle>
+          <DialogDescription className="text-slate-500">
+            Set the sprint goal, dates, and lifecycle status.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="border-slate-200 bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label>Goal</Label>
+            <Textarea value={goal} onChange={(e) => setGoal(e.target.value)} className="min-h-24 border-slate-200 bg-slate-50" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Start</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="border-slate-200 bg-slate-50" />
+            </div>
+            <div className="space-y-2">
+              <Label>End</Label>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border-slate-200 bg-slate-50" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <select value={status} onChange={(e) => setStatus(e.target.value as Sprint["status"])} className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900">
+              <option value="planned">Planned</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          {err && <p className="text-sm text-red-600">{err}</p>}
+        </div>
+        <DialogFooter>
+          <DialogClose render={<Button variant="ghost" className="text-slate-500 cursor-pointer">Cancel</Button>} />
+          <Button onClick={submit} disabled={busy} className="bg-primary text-white hover:bg-primary/90 cursor-pointer">
+            {busy ? "Saving..." : "Save sprint"}
           </Button>
         </DialogFooter>
       </DialogContent>

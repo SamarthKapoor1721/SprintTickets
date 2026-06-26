@@ -10,7 +10,14 @@ async function main() {
   const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || "admin@sprinttickets.com";
   const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || "admin123";
 
-  console.log(`Ensuring super_admin exists: ${superAdminEmail}`);
+  const demoEmails = ["ceo@erh.dev", "manager@erh.dev", "employee@erh.dev", "admin@sprinttickets.com"];
+  const emailsToDelete = demoEmails.filter((email) => email !== superAdminEmail);
+
+  if (emailsToDelete.length > 0) {
+    await prisma.user.deleteMany({
+      where: { email: { in: emailsToDelete } },
+    });
+  }
 
   const hashedPassword = bcrypt.hashSync(superAdminPassword, 10);
 
@@ -19,16 +26,21 @@ async function main() {
     update: {
       role: UserRole.super_admin,
       hashedPassword,
+      fullName: "Super Admin",
+      department: "Operations",
+      onboardingToken: null,
+      isActive: true,
     },
     create: {
       email: superAdminEmail,
       hashedPassword,
       fullName: "Super Admin",
+      department: "Operations",
       role: UserRole.super_admin,
     },
   });
 
-  console.log("Super Admin seeded successfully.");
+  console.log(`Seeded super admin account: ${superAdminEmail}`);
 }
 
 main()

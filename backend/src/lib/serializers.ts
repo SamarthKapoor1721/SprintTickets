@@ -6,14 +6,21 @@ import type {
   ReviewRequest,
   User,
   Task,
+  Sprint,
+  TaskComment,
   DailyProgressReport,
+  DailyProgressReportTask,
+  ReportAttachment,
 } from "@prisma/client";
+
+import { buildReportInsights } from "./report-insights";
 
 type UserWithRelations = User;
 
 export function serializeUser(user: UserWithRelations) {
   return {
     id: user.id,
+    employee_id: user.id,
     email: user.email,
     full_name: user.fullName,
     department: user.department,
@@ -151,6 +158,30 @@ export function serializeComment(
   };
 }
 
+export function serializeSprint(
+  sprint: Sprint & {
+    project?: (Project & {
+      owner?: User | null;
+      memberships?: (ProjectMember & { user: User })[];
+    }) | null;
+    _count?: { tasks?: number };
+  },
+) {
+  return {
+    id: sprint.id,
+    name: sprint.name,
+    goal: sprint.goal,
+    status: sprint.status,
+    start_date: sprint.startDate,
+    end_date: sprint.endDate,
+    project_id: sprint.projectId,
+    project: sprint.project ? serializeProject(sprint.project) : null,
+    task_count: sprint._count?.tasks ?? 0,
+    created_at: sprint.createdAt,
+    updated_at: sprint.updatedAt,
+  };
+}
+
 export function serializeMessage(message: Message) {
   return {
     id: message.id,
@@ -179,38 +210,103 @@ export function serializeTask(
   task: Task & {
     assignee?: User | null;
     creator?: User | null;
+    project?: (Project & {
+      owner?: User | null;
+      memberships?: (ProjectMember & { user: User })[];
+    }) | null;
+    sprint?: Sprint | null;
+    _count?: { comments?: number };
   },
 ) {
   return {
     id: task.id,
     title: task.title,
     description: task.description,
+    issue_type: task.issueType,
     status: task.status,
     priority: task.priority,
     project_id: task.projectId,
+    project: task.project ? serializeProject(task.project) : null,
+    sprint_id: task.sprintId,
+    sprint: task.sprint ? serializeSprint(task.sprint) : null,
     assignee_id: task.assigneeId,
     creator_id: task.creatorId,
     assignee: task.assignee ? serializeUser(task.assignee) : null,
     creator: task.creator ? serializeUser(task.creator) : null,
+    due_date: task.dueDate,
+    estimate_minutes: task.estimateMinutes,
+    logged_minutes: task.loggedMinutes,
+    comments_count: task._count?.comments ?? 0,
     created_at: task.createdAt,
     updated_at: task.updatedAt,
+  };
+}
+
+export function serializeTaskComment(
+  comment: TaskComment & {
+    author?: User | null;
+  },
+) {
+  return {
+    id: comment.id,
+    content: comment.content,
+    task_id: comment.taskId,
+    author_id: comment.authorId,
+    author: comment.author ? serializeUser(comment.author) : null,
+    created_at: comment.createdAt,
   };
 }
 
 export function serializeReport(
   report: DailyProgressReport & {
     submitter?: User | null;
-    project?: Project | null;
+    project?: (Project & {
+      owner?: User | null;
+      memberships?: (ProjectMember & { user: User })[];
+    }) | null;
+    taskLinks?: (DailyProgressReportTask & {
+      task: Task & {
+        assignee?: User | null;
+        creator?: User | null;
+        sprint?: Sprint | null;
+      };
+    })[];
+    attachments?: ReportAttachment[];
   },
 ) {
+  const attachments = (report.attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    file_name: attachment.fileName,
+    mime_type: attachment.mimeType,
+    size_bytes: attachment.sizeBytes,
+    download_url: `/api/v1/reports/${report.id}/attachments/${attachment.id}`,
+    created_at: attachment.createdAt,
+  }));
+
+  const pointers = buildReportInsights({
+    content: report.content,
+    yesterday: report.yesterday,
+    today: report.today,
+    blockers: report.blockers,
+    tasks: (report.taskLinks ?? []).map((link) => link.task),
+    attachments: report.attachments ?? [],
+  });
+
   return {
     id: report.id,
     content: report.content,
+    yesterday: report.yesterday,
+    today: report.today,
+    blockers: report.blockers,
+    minutes_spent: report.minutesSpent,
     date: report.date,
     submitter_id: report.submitterId,
     project_id: report.projectId,
     submitter: report.submitter ? serializeUser(report.submitter) : null,
     project: report.project ? serializeProject(report.project) : null,
+    tasks: (report.taskLinks ?? []).map((link) => serializeTask(link.task)),
+    attachments,
+    pointers,
     created_at: report.createdAt,
     updated_at: report.updatedAt,
   };

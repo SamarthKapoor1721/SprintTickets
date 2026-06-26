@@ -5,13 +5,6 @@ import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { login } from "@/lib/api"
 
-const DEMO_CHIPS = [
-  { role: "CEO", email: "ceo@erh.dev" },
-  { role: "Manager", email: "manager@erh.dev" },
-  { role: "Employee", email: "employee@erh.dev" },
-]
-const DEMO_PASSWORD = "password123"
-
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -92,30 +85,6 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
-
-          {/* Demo accounts */}
-          <div className="mt-[18px] rounded-[11px] border border-[#eef2f7] bg-[#f8fafc] px-3.5 py-3">
-            <div className="mb-2.5 text-[11.5px] font-semibold uppercase tracking-[0.04em] text-slate-400">
-              Demo accounts · password123
-            </div>
-            <div className="flex gap-1.5">
-              {DEMO_CHIPS.map((d) => (
-                <button
-                  key={d.email}
-                  type="button"
-                  onClick={() => {
-                    setEmail(d.email)
-                    setPassword(DEMO_PASSWORD)
-                    setError(null)
-                  }}
-                  className="flex-1 rounded-lg border border-[#e2e8f0] bg-white px-1.5 py-1.5 text-center transition-colors hover:border-primary hover:bg-[#f5f8ff] cursor-pointer"
-                >
-                  <div className="text-[12px] font-semibold text-slate-800">{d.role}</div>
-                  <div className="mt-px text-[10.5px] text-slate-400">{d.email}</div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="mt-6 text-center text-xs text-slate-400">© 2026 Sprint Tickets · Internal use only</div>

@@ -1,8 +1,8 @@
 # Sprint Tickets
 
-**Sprint Tickets** is an internal enterprise web platform that streamlines and formalizes project review requests sent to the CEO.
+**Sprint Tickets** is an internal enterprise web platform for project review requests, Jira-style task tracking, sprint planning, and structured daily updates for executives, managers, and employees.
 
-By replacing ad-hoc communication (WhatsApp, Slack, hallway conversations) with a unified digital workflow, it provides complete transparency into the project review lifecycle, reduces backlogs, and ensures executives have all the context they need to make rapid decisions.
+By replacing ad-hoc communication (WhatsApp, Slack, hallway conversations) with a unified digital workflow, it provides complete transparency into delivery progress, blockers, attachments, and executive review context.
 
 ---
 
@@ -34,7 +34,8 @@ The platform is driven by a role-based access control system enforced on both th
 - **JWT authentication** with role-based access control (CEO / Manager / Employee).
 - **Teams** — every project is a team with a **lead** (owner) and members; add/remove members, view a team's reviews, delete a team.
 - **Review lifecycle** — submit a review → reviewers approve / reject / request changes → threaded comments → status reflected across dashboards.
-- **Role-aware dashboards** — live pending / urgent / approved metrics and activity lists computed from real data.
+- **Work tracking** — Jira-style tasks, sprints, task comments, status flow, due dates, estimates, and structured daily reports with file uploads.
+- **Role-aware dashboards** — live pending / urgent / approved metrics and activity lists computed from real data, plus workload and reporting coverage.
 - **Private direct messaging** — 1:1 chat between any users (e.g. CEO ↔ employee/manager) with unread counts and live polling.
 - **Light, professional UI** — Linear/Stripe-inspired light theme.
 
@@ -121,16 +122,12 @@ npm install
 
 Open **http://localhost:4321**.
 
-### Demo accounts
-All use the password **`password123`**:
+### Admin account
+Use the super admin account configured in [`backend/.env`](backend/.env). In this workspace it is:
 
-| Role | Email |
-|------|-------|
-| CEO | `ceo@erh.dev` |
-| Manager | `manager@erh.dev` |
-| Employee | `employee@erh.dev` |
-
-> Tip: to see direct messaging live, log in as the CEO in one browser and as the Employee in an incognito window.
+| Role | Email | Password |
+|------|-------|----------|
+| Super admin | `rjot32263@gmail.com` | `AdminNot@A2026` |
 
 ---
 
