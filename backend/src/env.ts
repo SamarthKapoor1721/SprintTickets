@@ -7,9 +7,17 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   PORT: z.coerce.number().int().positive().default(8008),
+  APP_URL: z.string().trim().url().default("http://localhost:4321"),
   CORS_ORIGINS: z
     .string()
     .default("http://localhost:4321,http://localhost:3000,http://localhost:3002"),
+  SMTP_URL: z.string().trim().optional(),
+  SMTP_HOST: z.string().trim().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z.enum(["true", "false"]).default("false"),
+  SMTP_USER: z.string().trim().optional(),
+  SMTP_PASS: z.string().optional(),
+  EMAIL_FROM: z.string().trim().default("no-reply@sprinttickets.local"),
   NODE_ENV: z.string().default("development"),
 });
 

@@ -228,8 +228,15 @@ export interface UserCreate {
   role?: string
 }
 
+export interface UserInvite extends User {
+  onboardingToken: string
+  onboardingUrl: string
+  emailSent: boolean
+  emailError: string | null
+}
+
 export const createUser = (data: UserCreate) =>
-  request<User & { onboardingToken: string }>("/users", { method: "POST", body: JSON.stringify(data) })
+  request<UserInvite>("/users", { method: "POST", body: JSON.stringify(data) })
 
 export const deleteUser = (id: number) =>
   request<void>(`/users/${id}`, { method: "DELETE" })
