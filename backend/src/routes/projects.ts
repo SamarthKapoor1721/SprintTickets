@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { UserRole } from "@prisma/client";
+import { cacheGet, cacheSet, cacheInvalidate } from "../lib/cache";
 import { z } from "zod";
 
 import { prisma } from "../lib/prisma";
@@ -59,6 +60,13 @@ projectsRouter.get(
       throw unauthorized();
     }
 
+    const cacheKey = `projects:list`;
+    const cached = await cacheGet<unknown[]>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
     const where =
       hasMinimumRole(req.authUser.role, UserRole.ceo) || isSuperAdmin(req.authUser.role)
         ? undefined
@@ -80,7 +88,9 @@ projectsRouter.get(
       },
     });
 
-    res.json(projects.map(serializeProject));
+    const result = projects.map(serializeProject);
+    await cacheSet(cacheKey, result, 60);
+    res.json(result);
   }),
 );
 
@@ -108,6 +118,7 @@ projectsRouter.post(
       },
     });
 
+    await cacheInvalidate("projects:list");
     res.status(201).json(serializeProject(project));
   }),
 );
@@ -187,6 +198,7 @@ projectsRouter.patch(
       throw notFound("Project not found");
     }
 
+    await cacheInvalidate("projects:list");
     res.json(serializeProject(updated));
   }),
 );
@@ -221,6 +233,7 @@ projectsRouter.delete(
       }),
     ]);
 
+    await cacheInvalidate("projects:list");
     res.status(204).send();
   }),
 );

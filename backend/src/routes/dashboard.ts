@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Prisma, User, UserRole } from "@prisma/client";
+import { cacheGet, cacheSet } from "../lib/cache";
 
 import { prisma } from "../lib/prisma";
 import { isPrismaConnectionError } from "../lib/prisma-errors";
@@ -129,6 +130,13 @@ dashboardRouter.get(
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
 
+    const cacheKey = `dashboard:summary:${req.authUser.id}`;
+    const cached = await cacheGet<object>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
     try {
       const today = startOfToday();
       const taskScope = taskAccessWhere(req.authUser);
@@ -193,7 +201,7 @@ dashboardRouter.get(
       }));
       const totalTasks = taskRows.length;
 
-      res.json({
+      const summary = {
         role: req.authUser.role,
         metrics: {
           projects: projectsCount,
@@ -219,7 +227,9 @@ dashboardRouter.get(
           role: user.role,
           is_active: user.isActive,
         })),
-      });
+      };
+      await cacheSet(cacheKey, summary, 60);
+      res.json(summary);
     } catch (error) {
       if (isPrismaConnectionError(error)) {
         res.json(emptySummary(req.authUser.role));

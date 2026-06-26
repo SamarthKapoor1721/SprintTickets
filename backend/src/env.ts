@@ -19,6 +19,8 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().trim().default("no-reply@sprinttickets.local"),
   NODE_ENV: z.string().default("development"),
+  REDIS_URL: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -34,4 +36,6 @@ export const env = {
     .map((origin) => origin.trim())
     .filter(Boolean),
   isProduction: parsed.data.NODE_ENV === "production",
+  REDIS_URL: parsed.data.REDIS_URL ?? null,
+  ANTHROPIC_API_KEY: parsed.data.ANTHROPIC_API_KEY ?? null,
 };
