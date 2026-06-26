@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { useAuth } from "@/lib/auth-context"
 import {
   listReports,
   listProjects,
@@ -45,7 +44,10 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    load()
+    const timer = setTimeout(() => {
+      load()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [load])
 
   return (

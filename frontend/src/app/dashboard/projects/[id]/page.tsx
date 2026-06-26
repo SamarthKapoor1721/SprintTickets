@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, ChevronRight, Crown, Trash2, UserPlus, X } from "lucide-react"
+import { ArrowLeft, ChevronRight, Crown, Edit3, Trash2, UserPlus, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   addMember,
   deleteProject,
@@ -26,6 +29,7 @@ import {
   listReviews,
   listUsers,
   removeMember,
+  updateProject,
   type Project,
   type Review,
   type User,
@@ -77,8 +81,6 @@ export default function ProjectDetailPage() {
   const [selected, setSelected] = useState("")
   const [busy, setBusy] = useState(false)
 
-  const canManage = role === "ceo" || role === "manager" || role === "super_admin"
-
   const load = useCallback(() => {
     Promise.all([getProject(id), listMembers(id), listReviews({ projectId: id })])
       .then(([p, m, r]) => {
@@ -91,11 +93,18 @@ export default function ProjectDetailPage() {
   }, [id])
 
   useEffect(() => {
-    load()
-    if (role === "ceo" || role === "manager" || role === "super_admin") {
-       listUsers().then(setAllUsers).catch(() => {})
-    }
+    const timer = setTimeout(() => {
+      load()
+      if (role === "ceo" || role === "manager" || role === "super_admin") {
+        listUsers().then(setAllUsers).catch(() => {})
+      }
+    }, 0)
+    return () => clearTimeout(timer)
   }, [load, role])
+
+  const canManage =
+    Boolean(project) &&
+    (role === "ceo" || role === "super_admin" || project?.owner_id === user?.id)
 
   const memberIds = new Set(members.map((m) => m.id))
   const addable = allUsers.filter((u) => !memberIds.has(u.id))
@@ -173,37 +182,43 @@ export default function ProjectDetailPage() {
         </div>
 
         {canManage && (
-          <Dialog>
-            <DialogTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  className="gap-2 text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer"
-                >
-                  <Trash2 className="h-4 w-4" /> Delete
-                </Button>
-              }
+          <div className="flex flex-wrap items-center gap-2">
+            <EditProjectDialog
+              project={project}
+              onSaved={(updated) => setProject(updated)}
             />
-            <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Delete this team?</DialogTitle>
-                <DialogDescription className="text-slate-500">
-                  This permanently deletes <span className="font-medium text-slate-700">{project.name}</span> and
-                  its team. Its reviews are kept but detached from the project. This cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose render={<Button variant="ghost" className="text-slate-500 cursor-pointer">Cancel</Button>} />
-                <Button
-                  onClick={handleDelete}
-                  disabled={busy}
-                  className="bg-red-600 text-white hover:bg-red-700 cursor-pointer"
-                >
-                  {busy ? "Deleting…" : "Delete team"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            <Dialog>
+              <DialogTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    className="gap-2 text-slate-500 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </Button>
+                }
+              />
+              <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Delete this team?</DialogTitle>
+                  <DialogDescription className="text-slate-500">
+                    This permanently deletes <span className="font-medium text-slate-700">{project.name}</span> and
+                    its team. Its reviews are kept but detached from the project. This cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <DialogClose render={<Button variant="ghost" className="text-slate-500 cursor-pointer">Cancel</Button>} />
+                  <Button
+                    onClick={handleDelete}
+                    disabled={busy}
+                    className="bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+                  >
+                    {busy ? "Deleting…" : "Delete team"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         )}
       </div>
 
@@ -328,5 +343,139 @@ export default function ProjectDetailPage() {
         </CardContent>
       </Card>
     </motion.div>
+  )
+}
+
+function EditProjectDialog({
+  project,
+  onSaved,
+}: {
+  project: Project
+  onSaved: (updated: Project) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(project.name)
+  const [description, setDescription] = useState(project.description ?? "")
+  const [department, setDepartment] = useState(project.department ?? "")
+  const [status, setStatus] = useState<Project["status"]>(project.status as Project["status"])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        setName(project.name)
+        setDescription(project.description ?? "")
+        setDepartment(project.department ?? "")
+        setStatus(project.status as Project["status"])
+        setErr(null)
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [open, project])
+
+  const submit = async () => {
+    if (!name.trim()) {
+      setErr("Project name is required")
+      return
+    }
+
+    setBusy(true)
+    setErr(null)
+    try {
+      const updated = await updateProject(project.id, {
+        name: name.trim(),
+        description: description.trim().length > 0 ? description.trim() : null,
+        department: department.trim().length > 0 ? department.trim() : null,
+        status,
+      })
+      onSaved(updated)
+      setOpen(false)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to update team")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            className="gap-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+          >
+            <Edit3 className="h-4 w-4" />
+            Edit team
+          </Button>
+        }
+      />
+      <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit team</DialogTitle>
+          <DialogDescription className="text-slate-500">
+            Update the team name, description, department, or status.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label className="text-slate-700">Name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="border-slate-200 bg-slate-50"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-slate-700">Description</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="min-h-28 border-slate-200 bg-slate-50"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-slate-700">Department</Label>
+              <Input
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="border-slate-200 bg-slate-50"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-700">Status</Label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as Project["status"])}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+              >
+                <option value="active">Active</option>
+                <option value="on_hold">On hold</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+          {err && <p className="text-sm text-red-600">{err}</p>}
+        </div>
+        <DialogFooter>
+          <DialogClose
+            render={
+              <Button variant="ghost" className="text-slate-500 cursor-pointer">
+                Cancel
+              </Button>
+            }
+          />
+          <Button
+            onClick={submit}
+            disabled={busy}
+            className="bg-primary text-white hover:bg-primary/90 cursor-pointer"
+          >
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

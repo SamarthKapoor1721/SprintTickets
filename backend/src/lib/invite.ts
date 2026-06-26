@@ -41,6 +41,15 @@ function getTransport() {
   return null;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function buildOnboardingUrl(token: string) {
   const url = new URL("/auth/onboard", env.APP_URL);
   url.searchParams.set("token", token);
@@ -61,7 +70,7 @@ export async function sendOnboardingInvite({
   }
 
   const name = fullName?.trim();
-  const greeting = name ? `Hello ${name}` : "Hello";
+  const greeting = name ? `Hello ${escapeHtml(name)}` : "Hello";
   const subject = "You are invited to Sprint Tickets";
   const text = [
     `${greeting},`,

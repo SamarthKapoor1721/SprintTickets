@@ -60,6 +60,28 @@ export interface User {
   is_active: boolean
 }
 
+export interface UserDetailCounts {
+  owned_projects: number
+  member_projects: number
+  submitted_reviews: number
+  reviewed_reviews: number
+  assigned_tasks: number
+  created_tasks: number
+  reports: number
+}
+
+export interface UserDetail extends User {
+  onboarding_pending: boolean
+  counts: UserDetailCounts
+  owned_projects: Project[]
+  member_projects: Project[]
+  submitted_reviews: Review[]
+  reviewed_reviews: Review[]
+  assigned_tasks: Task[]
+  created_tasks: Task[]
+  reports: Report[]
+}
+
 export interface Project {
   id: number
   name: string
@@ -225,7 +247,7 @@ export interface UserCreate {
   email: string
   full_name?: string
   department?: string
-  role?: string
+  role?: Role
 }
 
 export interface UserInvite extends User {
@@ -235,8 +257,31 @@ export interface UserInvite extends User {
   emailError: string | null
 }
 
+export interface UserUpdate {
+  email?: string
+  full_name?: string | null
+  department?: string | null
+  role?: Role
+  is_active?: boolean
+  resend_invite?: boolean
+}
+
+export interface UserUpdateResult extends User {
+  onboardingUrl?: string | null
+  emailSent?: boolean
+  emailError?: string | null
+}
+
 export const createUser = (data: UserCreate) =>
   request<UserInvite>("/users", { method: "POST", body: JSON.stringify(data) })
+
+export const getUser = (id: number) => request<UserDetail>(`/users/${id}`)
+
+export const updateUser = (id: number, data: UserUpdate) =>
+  request<UserUpdateResult>(`/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
 
 export const deleteUser = (id: number) =>
   request<void>(`/users/${id}`, { method: "DELETE" })
@@ -253,8 +298,21 @@ export interface ProjectCreate {
   status?: string
 }
 
+export interface ProjectUpdate {
+  name?: string
+  description?: string | null
+  department?: string | null
+  status?: string
+}
+
 export const createProject = (data: ProjectCreate) =>
   request<Project>("/projects", { method: "POST", body: JSON.stringify(data) })
+
+export const updateProject = (id: number, data: ProjectUpdate) =>
+  request<Project>(`/projects/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
 
 export const deleteProject = (id: number) =>
   request<void>(`/projects/${id}`, { method: "DELETE" })

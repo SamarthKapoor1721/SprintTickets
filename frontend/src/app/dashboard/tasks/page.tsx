@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,12 +28,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Trash2, Edit3 } from "lucide-react"
-
-const statusStyles: Record<string, string> = {
-  todo: "bg-slate-100 text-slate-700",
-  in_progress: "bg-blue-100 text-blue-700",
-  done: "bg-emerald-100 text-emerald-700",
-}
 
 const priorityStyles: Record<string, string> = {
   critical: "bg-red-100 text-red-700",
@@ -65,7 +58,10 @@ export default function TasksPage() {
   }, [])
 
   useEffect(() => {
-    load()
+    const timer = setTimeout(() => {
+      load()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [load])
 
   return (
@@ -152,12 +148,15 @@ function TaskDialog({
 
   useEffect(() => {
     if (open && task) {
-      setTitle(task.title)
-      setDescription(task.description ?? "")
-      setStatus(task.status)
-      setPriority(task.priority)
-      setProjectId(String(task.project_id))
-      setAssigneeId(task.assignee_id ? String(task.assignee_id) : "")
+      const timer = setTimeout(() => {
+        setTitle(task.title)
+        setDescription(task.description ?? "")
+        setStatus(task.status)
+        setPriority(task.priority)
+        setProjectId(String(task.project_id))
+        setAssigneeId(task.assignee_id ? String(task.assignee_id) : "")
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [open, task])
 
@@ -241,7 +240,7 @@ function TaskDialog({
               <Label className="text-slate-700">Status</Label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
+                onChange={(e) => setStatus(e.target.value as Task["status"])}
                 className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
               >
                 <option value="todo">To Do</option>
@@ -274,7 +273,7 @@ function TaskDialog({
                   <Label className="text-slate-700">Status</Label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as any)}
+                    onChange={(e) => setStatus(e.target.value as Task["status"])}
                     className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
                   >
                     <option value="todo">To Do</option>
@@ -286,7 +285,7 @@ function TaskDialog({
                   <Label className="text-slate-700">Priority</Label>
                   <select
                     value={priority}
-                    onChange={(e) => setPriority(e.target.value as any)}
+                    onChange={(e) => setPriority(e.target.value as Task["priority"])}
                     className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
                   >
                     <option value="low">Low</option>

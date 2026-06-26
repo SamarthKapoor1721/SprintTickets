@@ -143,7 +143,6 @@ Required variables:
 - `JWT_SECRET` - a strong random secret
 - `PORT` - defaults to `8008`
 - `CORS_ORIGINS` - comma-separated frontend origins
-- `NEXT_PUBLIC_APP_URL` - public frontend origin used for onboarding/magic links; set this in production so copied links do not point at `localhost`
 - `APP_URL` - public frontend origin used by the backend when it builds onboarding links for email invites
 - `SMTP_URL` or `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` - mail transport configuration for direct invite delivery
 - `EMAIL_FROM` - sender address used for invite emails

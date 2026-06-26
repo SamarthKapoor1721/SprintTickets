@@ -60,7 +60,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const canManage = role === "ceo" || role === "manager"
+  const canManage = role === "ceo" || role === "manager" || role === "super_admin"
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -71,7 +71,10 @@ export default function ProjectsPage() {
   }, [])
 
   useEffect(() => {
-    refresh()
+    const timer = setTimeout(() => {
+      refresh()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [refresh])
 
   return (
