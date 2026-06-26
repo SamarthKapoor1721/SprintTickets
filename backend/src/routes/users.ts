@@ -10,6 +10,7 @@ import { parseIntStrict, parseBody } from "../lib/validation";
 import { canManageUser } from "../lib/rbac";
 import { forbidden, conflict, notFound, unauthorized } from "../lib/http-error";
 import { randomUUID } from "crypto";
+import { buildOnboardingUrl, sendOnboardingInvite } from "../lib/invite";
 
 export const usersRouter = Router();
 
@@ -68,7 +69,20 @@ usersRouter.post(
       },
     });
 
-    res.status(201).json({ ...serializeUser(user), onboardingToken });
+    const onboardingUrl = buildOnboardingUrl(onboardingToken);
+    const delivery = await sendOnboardingInvite({
+      to: body.email,
+      fullName: body.full_name,
+      onboardingUrl,
+    });
+
+    res.status(201).json({
+      ...serializeUser(user),
+      onboardingToken,
+      onboardingUrl,
+      emailSent: delivery.sent,
+      emailError: delivery.error,
+    });
   })
 );
 

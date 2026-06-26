@@ -16,10 +16,10 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
-# ---- Environment / secrets ----
-.env
-.env.*
-!.env.example
+# # ---- Environment / secrets ----
+# .env
+# .env.*
+# !.env.example
 
 # ---- Node / frontend ----
 node_modules/

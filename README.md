@@ -144,6 +144,9 @@ Required variables:
 - `PORT` - defaults to `8008`
 - `CORS_ORIGINS` - comma-separated frontend origins
 - `NEXT_PUBLIC_APP_URL` - public frontend origin used for onboarding/magic links; set this in production so copied links do not point at `localhost`
+- `APP_URL` - public frontend origin used by the backend when it builds onboarding links for email invites
+- `SMTP_URL` or `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` - mail transport configuration for direct invite delivery
+- `EMAIL_FROM` - sender address used for invite emails
 
 The schema is defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma) and the initial Neon migration lives in [`backend/prisma/migrations/0001_init/migration.sql`](backend/prisma/migrations/0001_init/migration.sql).
 

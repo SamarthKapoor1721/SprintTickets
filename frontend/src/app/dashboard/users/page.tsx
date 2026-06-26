@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getAppBaseUrl } from "@/lib/site"
 import { Trash2, UserPlus } from "lucide-react"
 
 export default function UsersPage() {
@@ -136,7 +135,12 @@ function UserDialog({
   
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [magicLink, setMagicLink] = useState<string | null>(null)
+  const [invite, setInvite] = useState<{
+    link: string
+    email: string
+    emailSent: boolean
+    emailError: string | null
+  } | null>(null)
 
   const submit = async () => {
     if (!email.trim()) {
@@ -152,10 +156,12 @@ function UserDialog({
         department,
         role
       })
-      const link = new URL("/auth/onboard", getAppBaseUrl())
-      link.searchParams.set("token", newUser.onboardingToken)
-      const magicUrl = link.toString()
-      setMagicLink(magicUrl)
+      setInvite({
+        link: newUser.onboardingUrl,
+        email: newUser.email,
+        emailSent: newUser.emailSent,
+        emailError: newUser.emailError,
+      })
       setEmail("")
       setFullName("")
       setDepartment("")
@@ -168,27 +174,31 @@ function UserDialog({
     }
   }
 
-  if (magicLink) {
+  if (invite) {
     return (
-      <Dialog open={true} onOpenChange={(val) => { if (!val) { setMagicLink(null); setOpen(false); }}}>
+      <Dialog open={true} onOpenChange={(val) => { if (!val) { setInvite(null); setOpen(false); }}}>
         <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>User Created!</DialogTitle>
+            <DialogTitle>{invite.emailSent ? "Invitation Sent" : "User Created"}</DialogTitle>
             <DialogDescription>
-              Share this magic link with the user so they can activate their account and set their password.
+              {invite.emailSent
+                ? `The onboarding link was emailed to ${invite.email}.`
+                : invite.emailError
+                  ? `The user was created, but email delivery failed: ${invite.emailError}`
+                  : `Share this magic link with ${invite.email} so they can activate their account and set their password.`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-2">
             <Label>Magic Link</Label>
             <div className="flex gap-2">
-              <Input readOnly value={magicLink} className="bg-slate-50" />
-              <Button onClick={() => navigator.clipboard.writeText(magicLink)} variant="outline" className="cursor-pointer">
+              <Input readOnly value={invite.link} className="bg-slate-50" />
+              <Button onClick={() => navigator.clipboard.writeText(invite.link)} variant="outline" className="cursor-pointer">
                 Copy
               </Button>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => { setMagicLink(null); setOpen(false); }} className="bg-primary text-white cursor-pointer">
+            <Button onClick={() => { setInvite(null); setOpen(false); }} className="bg-primary text-white cursor-pointer">
               Done
             </Button>
           </DialogFooter>
