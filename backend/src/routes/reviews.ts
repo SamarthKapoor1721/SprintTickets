@@ -80,6 +80,7 @@ async function getReviewOrThrow(reviewId: number) {
     include: {
       submitter: true,
       reviewers: true,
+      attachments: true,
     },
   });
 
@@ -200,6 +201,7 @@ reviewsRouter.post(
       include: {
         submitter: true,
         reviewers: true,
+        attachments: true,
       },
     });
 
@@ -255,16 +257,17 @@ reviewsRouter.patch(
       throw notFound("Review not found");
     }
 
+    const authUserId = req.authUser.id;
     const isDecision = body.status !== undefined || body.reviewer_ids !== undefined;
     const isPrivileged = hasMinimumRole(req.authUser.role, UserRole.manager) || isSuperAdmin(req.authUser.role);
 
     if (isDecision && !isPrivileged) {
-      const isReviewer = review.reviewers.some(r => r.id === req.authUser.id);
+      const isReviewer = review.reviewers.some(r => r.id === authUserId);
       if (!isReviewer) {
         throw forbidden("Only reviewers can change status");
       }
     }
-    if (!isDecision && review.submitterId !== req.authUser.id && !isPrivileged) {
+    if (!isDecision && review.submitterId !== authUserId && !isPrivileged) {
       throw forbidden("Not your review");
     }
 
@@ -301,6 +304,7 @@ reviewsRouter.patch(
       include: {
         submitter: true,
         reviewers: true,
+        attachments: true,
       },
     });
 

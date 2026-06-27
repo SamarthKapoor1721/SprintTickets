@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { ChevronRight, RefreshCw, Sparkles, X } from "lucide-react"
-import { getAISummary, listReviews, listProjects, type Review, type Project } from "@/lib/api"
+import { getAISummary, getActivity, listReviews, listProjects, type Review, type Project, type ActivityItem } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 
 // ── Style helpers ────────────────────────────────────────────────
@@ -26,6 +26,22 @@ function initials(name?: string | null) {
 }
 
 function ticketId(id: number) { return `R-${String(id).padStart(3, "0")}` }
+
+function activityDot(item: { type: string; status: string | null }): string {
+  if (item.type === "review_decision" || item.type === "review_submitted") {
+    if (item.status === "approved") return "#16a34a"
+    if (item.status === "rejected") return "#dc2626"
+    if (item.status === "needs_changes") return "#7c3aed"
+    return "#2563eb"
+  }
+  switch (item.type) {
+    case "report_submitted": return "#0d9488"
+    case "review_comment": return "#0891b2"
+    case "task_created": return "#6366f1"
+    case "task_updated": return "#d97706"
+    default: return "#94a3b8"
+  }
+}
 
 function timeAgo(iso: string | null): string {
   if (!iso) return ""
@@ -67,6 +83,7 @@ export default function DashboardPage() {
 
   const [reviews, setReviews] = useState<Review[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [feed, setFeed] = useState<ActivityItem[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   const canSummarize = role === "ceo" || role === "super_admin" || role === "manager"
@@ -98,6 +115,13 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  // Privileged roles get the consolidated cross-resource activity feed
+  // (reviews, reports, tasks, comments). Employees fall back to review events.
+  useEffect(() => {
+    if (!canSummarize) return
+    getActivity().then(setFeed).catch(() => setFeed(null))
+  }, [canSummarize])
 
   const firstName = (user?.full_name ?? user?.email ?? "there").split(/[\s@]/)[0]
 
@@ -392,8 +416,45 @@ export default function DashboardPage() {
 
           {/* Recent activity */}
           <div className="rounded-[14px] border border-[#eef2f7] bg-white px-[18px] py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-            <div className="mb-[14px] text-[14px] font-semibold text-slate-900">Recent activity</div>
-            {activity.length === 0 ? (
+            <div className="mb-[14px] flex items-center justify-between">
+              <span className="text-[14px] font-semibold text-slate-900">Recent activity</span>
+              {feed && feed.length > 0 && (
+                <span className="text-[11px] font-medium text-slate-400">Across the company</span>
+              )}
+            </div>
+
+            {feed ? (
+              feed.length === 0 ? (
+                <p className="text-[13px] text-slate-400">No recent activity.</p>
+              ) : (
+                <div>
+                  {feed.slice(0, 8).map((a, i) => (
+                    <Link
+                      key={a.id}
+                      href={a.link}
+                      className="-mx-2 flex gap-[11px] rounded-[8px] px-2 pb-[14px] pt-1 transition-colors last:pb-1 hover:bg-[#fafbfd]"
+                    >
+                      <div className="flex flex-shrink-0 flex-col items-center">
+                        <div className="mt-[5px] h-2 w-2 rounded-full" style={{ background: activityDot(a) }} />
+                        {i < Math.min(feed.length, 8) - 1 && (
+                          <div className="mt-1 w-px flex-1 bg-[#eef2f7]" />
+                        )}
+                      </div>
+                      <div className="min-w-0 pb-0.5">
+                        <div className="text-[13px] leading-[1.45] text-slate-500">
+                          <span className="font-semibold text-slate-800">{a.actor}</span>{" "}
+                          <span>{a.action}</span>
+                          {a.title && a.type !== "report_submitted" && (
+                            <span className="text-slate-600"> · {a.title}</span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[11.5px] text-slate-400">{timeAgo(a.timestamp)}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )
+            ) : activity.length === 0 ? (
               <p className="text-[13px] text-slate-400">No recent activity.</p>
             ) : (
               <div>

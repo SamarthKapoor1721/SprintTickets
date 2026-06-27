@@ -12,7 +12,6 @@ import {
   type User,
 } from "@/lib/api"
 import { TEAMS } from "@/lib/teams"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -116,68 +115,76 @@ export default function UsersPage() {
                 <div className="h-px flex-1 bg-[#eef2f7]" />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {members.map((u) => {
+              <div className="overflow-hidden rounded-2xl border border-[#eef2f7] bg-white">
+                {members.map((u, i) => {
                   const canDelete =
                     (role === "super_admin" || role === "ceo") && u.id !== user?.id
                   return (
-                    <motion.div key={u.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                      <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <CardTitle className="text-base text-slate-900">
-                              {u.full_name ?? "Unnamed"}
-                            </CardTitle>
-                            <Badge
-                              className={`border-none capitalize ${ROLE_COLORS[u.role] ?? "bg-slate-100 text-slate-600"}`}
+                    <motion.div
+                      key={u.id}
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[#f8fafc] ${
+                        i > 0 ? "border-t border-[#f1f5f9]" : ""
+                      }`}
+                    >
+                      {/* Avatar */}
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-primary to-blue-600 text-[13px] font-semibold text-white">
+                        {(u.full_name ?? u.email ?? "?").slice(0, 1).toUpperCase()}
+                      </div>
+
+                      {/* Name + email */}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-medium text-slate-900">
+                          {u.full_name ?? "Unnamed"}
+                        </p>
+                        <p className="truncate text-[12.5px] text-slate-400">
+                          {u.email} · #{u.employee_id}
+                        </p>
+                      </div>
+
+                      {/* Role */}
+                      <Badge
+                        className={`hidden shrink-0 border-none capitalize sm:inline-flex ${ROLE_COLORS[u.role] ?? "bg-slate-100 text-slate-600"}`}
+                      >
+                        {u.role.replace("_", " ")}
+                      </Badge>
+
+                      {/* Actions */}
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {canViewProfiles && (
+                          <>
+                            <Link
+                              href={`/dashboard/users/${u.id}`}
+                              title="View"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
                             >
-                              {u.role.replace("_", " ")}
-                            </Badge>
-                          </div>
-                          <CardDescription className="text-slate-500">
-                            {u.email} · #{u.employee_id}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="mt-auto space-y-3 pt-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs text-slate-400">
-                              {u.department ?? "No team"}
-                            </span>
-                            {canViewProfiles && (
-                              <div className="flex items-center gap-2">
-                                <Link
-                                  href={`/dashboard/users/${u.id}`}
-                                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  View
-                                </Link>
-                                {canManage && (
-                                  <Link
-                                    href={`/dashboard/users/${u.id}?edit=1`}
-                                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    Edit
-                                  </Link>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          {canDelete && (
-                            <div className="flex justify-end">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDelete(u.id)}
-                                className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                            {canManage && (
+                              <Link
+                                href={`/dashboard/users/${u.id}?edit=1`}
+                                title="Edit"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
                               >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
+                                <Pencil className="h-4 w-4" />
+                              </Link>
+                            )}
+                          </>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(u.id)}
+                            title="Delete"
+                            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </motion.div>
                   )
                 })}

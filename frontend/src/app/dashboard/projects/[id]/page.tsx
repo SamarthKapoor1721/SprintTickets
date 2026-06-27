@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, CalendarDays, ChevronRight, Crown, Edit3, Trash2, UserPlus, X } from "lucide-react"
+import { ArrowLeft, CalendarDays, ChevronRight, Crown, Edit3, ImagePlus, Trash2, UserPlus, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { formatDateOnly, normalizeDateOnly } from "@/lib/date"
+import { fileToLogoDataUrl } from "@/lib/image"
+import { TeamLogo } from "@/components/team-logo"
 import {
   addMember,
   createSprint,
@@ -207,15 +209,18 @@ export default function ProjectDetailPage() {
       </Link>
 
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{project.name}</h1>
-            <Badge className={`border-none capitalize ${statusStyles[project.status] ?? ""}`}>
-              {project.status.replace("_", " ")}
-            </Badge>
+        <div className="flex items-start gap-4">
+          <TeamLogo name={project.name} logo={project.logo} size={56} />
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{project.name}</h1>
+              <Badge className={`border-none capitalize ${statusStyles[project.status] ?? ""}`}>
+                {project.status.replace("_", " ")}
+              </Badge>
+            </div>
+            <p className="text-slate-600">{project.description ?? "No description provided."}</p>
+            <p className="text-sm text-slate-400">{project.department ?? "No department"}</p>
           </div>
-          <p className="text-slate-600">{project.description ?? "No description provided."}</p>
-          <p className="text-sm text-slate-400">{project.department ?? "No department"}</p>
         </div>
 
         {canManage && (
@@ -482,6 +487,7 @@ function EditProjectDialog({
   const [description, setDescription] = useState(project.description ?? "")
   const [department, setDepartment] = useState(project.department ?? "")
   const [status, setStatus] = useState<Project["status"]>(project.status as Project["status"])
+  const [logo, setLogo] = useState<string | null>(project.logo)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -492,11 +498,21 @@ function EditProjectDialog({
         setDescription(project.description ?? "")
         setDepartment(project.department ?? "")
         setStatus(project.status as Project["status"])
+        setLogo(project.logo)
         setErr(null)
       }, 0)
       return () => clearTimeout(timer)
     }
   }, [open, project])
+
+  const handleLogoChange = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      setLogo(await fileToLogoDataUrl(file))
+    } catch {
+      setErr("Could not load that image")
+    }
+  }
 
   const submit = async () => {
     if (!name.trim()) {
@@ -511,6 +527,7 @@ function EditProjectDialog({
         name: name.trim(),
         description: description.trim().length > 0 ? description.trim() : null,
         department: department.trim().length > 0 ? department.trim() : null,
+        logo,
         status,
       })
       onSaved(updated)
@@ -543,6 +560,31 @@ function EditProjectDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label className="text-slate-700">Logo</Label>
+            <div className="flex items-center gap-3">
+              <TeamLogo name={name || "?"} logo={logo} size={48} />
+              <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100">
+                <ImagePlus className="h-4 w-4" />
+                {logo ? "Change" : "Upload"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleLogoChange(e.target.files?.[0])}
+                />
+              </label>
+              {logo && (
+                <button
+                  type="button"
+                  onClick={() => setLogo(null)}
+                  className="flex h-9 items-center gap-1 rounded-lg px-2 text-sm text-slate-400 transition-colors hover:text-red-600 cursor-pointer"
+                >
+                  <X className="h-4 w-4" /> Remove
+                </button>
+              )}
+            </div>
+          </div>
           <div className="space-y-2">
             <Label className="text-slate-700">Name</Label>
             <Input

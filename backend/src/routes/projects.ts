@@ -17,6 +17,8 @@ const projectCreateSchema = z.object({
   name: z.string().trim().min(1),
   description: z.string().trim().optional().nullable(),
   department: z.string().trim().optional().nullable(),
+  // Logo is stored as a small base64 data URL (icon-sized). Cap to ~1.5MB encoded.
+  logo: z.string().max(2_000_000).optional().nullable(),
   status: z.enum(["active", "completed", "on_hold"]).optional(),
 });
 
@@ -109,6 +111,7 @@ projectsRouter.post(
         name: body.name,
         description: body.description ?? null,
         department: body.department ?? null,
+        logo: body.logo ?? null,
         status: body.status ?? "active",
         ownerId: req.authUser.id,
       },
@@ -184,6 +187,7 @@ projectsRouter.patch(
           ...(body.name !== undefined ? { name: body.name } : {}),
           ...(body.description !== undefined ? { description: body.description ?? null } : {}),
           ...(body.department !== undefined ? { department: body.department ?? null } : {}),
+          ...(body.logo !== undefined ? { logo: body.logo ?? null } : {}),
           ...(body.status !== undefined ? { status: body.status } : {}),
           ...(nextOwnerId !== undefined ? { ownerId: nextOwnerId } : {}),
         },
