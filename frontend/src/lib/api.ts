@@ -161,7 +161,7 @@ export interface Review {
   updated_at: string | null
 }
 
-export interface Comment {
+export interface ReviewComment {
   id: number
   content: string
   review_request_id: number
@@ -471,18 +471,25 @@ export const updateReview = (id: number, patch: Partial<Review>) =>
     body: JSON.stringify(patch),
   })
 
-// ---- Comments ----
-export const listComments = (reviewId: number) =>
-  request<Comment[]>(`/reviews/${reviewId}/comments`)
+// ---- Review notes ----
+export const listReviewComments = (reviewId: number, opts: { limit?: number } = {}) => {
+  const params = new URLSearchParams()
+  if (opts.limit != null) params.set("limit", String(opts.limit))
+  const qs = params.toString()
+  return request<ReviewComment[]>(`/reviews/${reviewId}/comments${qs ? `?${qs}` : ""}`)
+}
 
-export const addComment = (reviewId: number, content: string) =>
-  request<Comment>(`/reviews/${reviewId}/comments`, {
+export const addReviewComment = (reviewId: number, content: string) =>
+  request<ReviewComment>(`/reviews/${reviewId}/comments`, {
     method: "POST",
     body: JSON.stringify({ content }),
   })
 
+export const listComments = listReviewComments
+export const addComment = addReviewComment
+
 // ---- Direct messages ----
-export interface Message {
+export interface DirectMessage {
   id: number
   content: string
   sender_id: number
@@ -500,11 +507,15 @@ export interface Contact {
 
 export const listContacts = () => request<Contact[]>("/messages/contacts")
 
-export const getConversation = (userId: number) =>
-  request<Message[]>(`/messages/${userId}`)
+export const getConversation = (userId: number, opts: { limit?: number } = {}) => {
+  const params = new URLSearchParams()
+  if (opts.limit != null) params.set("limit", String(opts.limit))
+  const qs = params.toString()
+  return request<DirectMessage[]>(`/messages/${userId}${qs ? `?${qs}` : ""}`)
+}
 
 export const sendMessage = (userId: number, content: string) =>
-  request<Message>(`/messages/${userId}`, {
+  request<DirectMessage>(`/messages/${userId}`, {
     method: "POST",
     body: JSON.stringify({ content }),
   })

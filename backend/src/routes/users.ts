@@ -313,7 +313,14 @@ usersRouter.delete(
       throw forbidden("You do not have permission to delete this user");
     }
 
-    await prisma.user.delete({ where: { id: targetId } });
+    await prisma.$transaction([
+      prisma.directMessage.deleteMany({
+        where: {
+          OR: [{ senderId: targetId }, { recipientId: targetId }],
+        },
+      }),
+      prisma.user.delete({ where: { id: targetId } }),
+    ]);
     res.status(204).send();
   }),
 );

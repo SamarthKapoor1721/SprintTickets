@@ -23,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -208,6 +207,16 @@ function UserDialog({
   const [err, setErr] = useState<string | null>(null)
   const [magicLink, setMagicLink] = useState<string | null>(null)
 
+  const closeCreateDialog = () => {
+    setOpen(false)
+    setErr(null)
+  }
+
+  const closeSuccessDialog = () => {
+    setMagicLink(null)
+    setOpen(false)
+  }
+
   const submit = async () => {
     if (!email.trim()) {
       setErr("Email is required")
@@ -234,8 +243,18 @@ function UserDialog({
 
   if (magicLink) {
     return (
-      <Dialog open={true} onOpenChange={(val) => { if (!val) { setMagicLink(null); setOpen(false) } }}>
-        <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+      <Dialog
+        open={Boolean(magicLink)}
+        onOpenChange={(val) => {
+          if (!val) {
+            closeSuccessDialog()
+          }
+        }}
+      >
+        <DialogContent
+          onClose={closeSuccessDialog}
+          className="border-slate-200 bg-white text-slate-900 sm:max-w-md"
+        >
           <DialogHeader>
             <DialogTitle>User Created!</DialogTitle>
             <DialogDescription>
@@ -270,7 +289,10 @@ function UserDialog({
           </Button>
         }
       />
-      <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+      <DialogContent
+        onClose={closeCreateDialog}
+        className="border-slate-200 bg-white text-slate-900 sm:max-w-md"
+      >
         <DialogHeader>
           <DialogTitle>Create User</DialogTitle>
           <DialogDescription>Add a new member to the workspace.</DialogDescription>
@@ -325,13 +347,13 @@ function UserDialog({
           {err && <p className="text-sm text-red-600">{err}</p>}
         </div>
         <DialogFooter>
-          <DialogClose
-            render={
-              <Button variant="ghost" className="text-slate-500 cursor-pointer">
-                Cancel
-              </Button>
-            }
-          />
+          <Button
+            variant="ghost"
+            onClick={closeCreateDialog}
+            className="text-slate-500 cursor-pointer"
+          >
+            Cancel
+          </Button>
           <Button onClick={submit} disabled={busy} className="bg-primary text-white hover:bg-primary/90 cursor-pointer">
             {busy ? "Creating…" : "Create User"}
           </Button>

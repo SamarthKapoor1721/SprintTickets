@@ -10,6 +10,7 @@ import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error
 import { requireAuth } from "../middleware/auth";
 import { serializeReport } from "../lib/serializers";
 import { canManageProject, hasMinimumRole, projectAccessWhere, reportAccessWhere, taskAccessWhere } from "../lib/rbac";
+import { sendReportNotificationEmail } from "../lib/email";
 
 export const reportsRouter = Router();
 
@@ -255,6 +256,23 @@ reportsRouter.post(
     });
 
     if (!report) throw notFound("Report not found");
+
+    const ceos = await prisma.user.findMany({ where: { role: UserRole.ceo } });
+    const recipientEmails = new Set(ceos.map(u => u.email));
+    
+    if (report.project?.owner) {
+      recipientEmails.add(report.project.owner.email);
+    }
+    
+    if (recipientEmails.size > 0) {
+      sendReportNotificationEmail(
+        Array.from(recipientEmails),
+        report.submitter.fullName || report.submitter.email,
+        report.project?.name,
+        report.date
+      ).catch(console.error);
+    }
+
     res.status(201).json(serializeReport(report));
   }),
 );

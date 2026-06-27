@@ -1,6 +1,6 @@
 import type {
-  Comment,
-  Message,
+  ReviewComment,
+  DirectMessage,
   Project,
   ProjectMember,
   ReviewRequest,
@@ -143,8 +143,8 @@ export function serializeReview(
   };
 }
 
-export function serializeComment(
-  comment: Comment & {
+export function serializeReviewComment(
+  comment: ReviewComment & {
     author?: User | null;
   },
 ) {
@@ -182,7 +182,7 @@ export function serializeSprint(
   };
 }
 
-export function serializeMessage(message: Message) {
+export function serializeDirectMessage(message: DirectMessage) {
   return {
     id: message.id,
     content: message.content,
@@ -195,7 +195,7 @@ export function serializeMessage(message: Message) {
 
 export function serializeContact(input: {
   user: User;
-  lastMessage: Message | null;
+  lastMessage: DirectMessage | null;
   unread: number;
 }) {
   return {

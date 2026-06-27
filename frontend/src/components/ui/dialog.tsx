@@ -2,10 +2,9 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -43,9 +42,11 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onClose,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  onClose?: () => void
 }) {
   return (
     <DialogPortal>
@@ -58,23 +59,25 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
+            onClick={onClose ? () => onClose() : undefined}
             render={
-              <Button
-                variant="ghost"
-                className="absolute top-2 right-2"
-                size="icon-sm"
+              <button
+                type="button"
+                aria-label="Close dialog"
+                className={cn(
+                  "absolute top-2 right-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                )}
               />
             }
           >
-            <XIcon
-            />
+            <XIcon className="h-4 w-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
+        {children}
       </DialogPrimitive.Popup>
     </DialogPortal>
   )
@@ -109,9 +112,16 @@ function DialogFooter({
     >
       {children}
       {showCloseButton && (
-        <DialogPrimitive.Close render={<Button variant="outline" />}>
+        <DialogClose
+          render={
+            <button
+              type="button"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            />
+          }
+        >
           Close
-        </DialogPrimitive.Close>
+        </DialogClose>
       )}
     </div>
   )

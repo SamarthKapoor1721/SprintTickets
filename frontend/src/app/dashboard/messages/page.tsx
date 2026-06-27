@@ -46,7 +46,7 @@ import {
   listProjects,
   sendMessage,
   type Contact,
-  type Message,
+  type DirectMessage,
   type Project,
   type User,
 } from "@/lib/api"
@@ -164,7 +164,7 @@ export default function MessagesPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [active, setActive] = useState<User | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<DirectMessage[]>([])
   const [messageFileUrls, setMessageFileUrls] = useState<Record<number, string[]>>({})
   const [draft, setDraft] = useState("")
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
@@ -214,7 +214,7 @@ export default function MessagesPage() {
     if (!active) return
     let cancelled = false
     const load = () =>
-      getConversation(active.id)
+      getConversation(active.id, { limit: 100 })
         .then((m) => { if (!cancelled) setMessages(m) })
         .catch(() => {})
     load()
@@ -601,8 +601,8 @@ export default function MessagesPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() }
                 }}
-                placeholder={`Message ${active.full_name ?? active.email}…`}
-                aria-label="Message"
+                placeholder={`Direct message ${active.full_name ?? active.email}…`}
+                aria-label="Direct message"
                 className="h-9 flex-1 rounded-[9px] border border-[#eef2f7] bg-[#f5f7fa] px-3.5 text-[13.5px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all"
               />
 

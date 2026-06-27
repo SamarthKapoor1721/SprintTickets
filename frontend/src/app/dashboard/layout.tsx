@@ -35,7 +35,7 @@ const PAGE_META: { match: (p: string) => boolean; title: string; sub: string }[]
   { match: (p) => p.startsWith("/dashboard/reports"), title: "Reports", sub: "Submitted reports" },
   { match: (p) => p.startsWith("/dashboard/reviews/new"), title: "New review", sub: "Submit work for review" },
   { match: (p) => p.startsWith("/dashboard/reviews"), title: "Reviews", sub: "Review requests across the company" },
-  { match: (p) => p.startsWith("/dashboard/messages"), title: "Messages", sub: "Private direct messages" },
+  { match: (p) => p.startsWith("/dashboard/messages"), title: "Direct messages", sub: "Private 1:1 conversations" },
 ]
 
 function DashboardContent({ children }: { children: ReactNode }) {
@@ -60,7 +60,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
     { name: "Reports", href: "/dashboard/reports", icon: FileText },
     { name: "Pending Reviews", href: "/dashboard/reviews/pending", icon: Clock },
     { name: "Approved", href: "/dashboard/reviews/approved", icon: CheckCircle },
-    { name: "Messages", href: "/dashboard/messages", icon: MessageSquare },
+    { name: "Direct messages", href: "/dashboard/messages", icon: MessageSquare },
   ]
 
   const SidebarContent = ({ onNav }: { onNav?: () => void }) => (

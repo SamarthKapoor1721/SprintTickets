@@ -6,6 +6,8 @@ declare global {
       authUser?: {
         id: number;
         role: UserRole;
+        email: string;
+        fullName: string | null;
       };
     }
   }

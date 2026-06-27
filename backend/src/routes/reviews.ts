@@ -8,8 +8,9 @@ import { asyncHandler } from "../lib/async-handler";
 import { parseBody, parseIntStrict, parseOptionalInt } from "../lib/validation";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error";
 import { requireAuth } from "../middleware/auth";
-import { serializeComment, serializeReview } from "../lib/serializers";
+import { serializeReviewComment, serializeReview } from "../lib/serializers";
 import { hasMinimumRole, isSuperAdmin } from "../lib/rbac";
+import { sendReviewCommentEmail } from "../lib/email";
 
 export const reviewsRouter = Router();
 
@@ -244,12 +245,17 @@ reviewsRouter.get(
       throw badRequest("Review id must be a number");
     }
     await getReviewOrThrow(reviewId);
-    const comments = await prisma.comment.findMany({
+    const limit = Number.isFinite(Number(req.query.limit))
+      ? Math.max(1, Math.min(200, parseIntStrict(req.query.limit, "limit")))
+      : 100;
+
+    const comments = await prisma.reviewComment.findMany({
       where: { reviewRequestId: reviewId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit,
       include: { author: true },
     });
-    res.json(comments.map(serializeComment));
+    res.json(comments.reverse().map(serializeReviewComment));
   }),
 );
 
@@ -265,9 +271,9 @@ reviewsRouter.post(
     if (!req.authUser) {
       throw unauthorized();
     }
-    await getReviewOrThrow(reviewId);
+    const review = await getReviewOrThrow(reviewId);
 
-    const comment = await prisma.comment.create({
+    const comment = await prisma.reviewComment.create({
       data: {
         content: body.content,
         reviewRequestId: reviewId,
@@ -278,6 +284,21 @@ reviewsRouter.post(
       },
     });
 
-    res.status(201).json(serializeComment(comment));
+    const recipientEmails = new Set<string>();
+    if (review.submitter?.email && review.submitter.id !== req.authUser.id) {
+      recipientEmails.add(review.submitter.email);
+    }
+    if (review.reviewer?.email && review.reviewer.id !== req.authUser.id) {
+      recipientEmails.add(review.reviewer.email);
+    }
+    
+    sendReviewCommentEmail(
+      Array.from(recipientEmails),
+      review.title,
+      req.authUser.fullName || req.authUser.email,
+      body.content
+    ).catch(console.error);
+
+    res.status(201).json(serializeReviewComment(comment));
   }),
 );

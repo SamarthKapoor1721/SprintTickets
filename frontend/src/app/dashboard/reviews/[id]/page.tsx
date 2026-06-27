@@ -18,12 +18,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  addComment,
+  addReviewComment,
   getAISummary,
   getReview,
-  listComments,
+  listReviewComments,
   updateReview,
-  type Comment,
+  type ReviewComment,
   type Review,
   type ReviewStatus,
 } from "@/lib/api"
@@ -59,7 +59,7 @@ export default function ReviewDetailPage() {
   const id = Number(params.id)
 
   const [review, setReview] = useState<Review | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [comments, setComments] = useState<ReviewComment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
@@ -91,7 +91,7 @@ export default function ReviewDetailPage() {
   }
 
   const load = useCallback(() => {
-    Promise.all([getReview(id), listComments(id)])
+    Promise.all([getReview(id), listReviewComments(id, { limit: 100 })])
       .then(([r, c]) => {
         setReview(r)
         setComments(c)
@@ -120,7 +120,7 @@ export default function ReviewDetailPage() {
     if (!newComment.trim()) return
     setBusy(true)
     try {
-      const c = await addComment(id, newComment)
+      const c = await addReviewComment(id, newComment)
       setComments((prev) => [...prev, c])
       setNewComment("")
     } catch (e) {
@@ -299,12 +299,12 @@ export default function ReviewDetailPage() {
       <Card className="glass border-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
-            <MessageSquare className="h-4 w-4 text-slate-400" /> Comments ({comments.length})
+            <MessageSquare className="h-4 w-4 text-slate-400" /> Review notes ({comments.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {comments.length === 0 ? (
-            <p className="text-sm text-slate-400">No comments yet.</p>
+              <p className="text-sm text-slate-400">No notes yet.</p>
           ) : (
             <div className="space-y-3">
               {comments.map((c) => (
@@ -330,7 +330,7 @@ export default function ReviewDetailPage() {
             <Textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment…"
+              placeholder="Add a note…"
               className="resize-none border-slate-200 bg-slate-50 text-slate-900"
             />
             <Button
@@ -338,7 +338,7 @@ export default function ReviewDetailPage() {
               disabled={busy || !newComment.trim()}
               className="self-end bg-primary text-white hover:bg-primary/90 cursor-pointer"
             >
-              Comment
+              Post note
             </Button>
           </div>
         </CardContent>
