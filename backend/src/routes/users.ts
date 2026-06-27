@@ -21,7 +21,7 @@ const projectDetailInclude = {
 
 const reviewDetailInclude = {
   submitter: true,
-  reviewer: true,
+  reviewers: true,
 } as const;
 
 const taskDetailInclude = {
@@ -98,7 +98,7 @@ usersRouter.get(
         include: reviewDetailInclude,
       }),
       prisma.reviewRequest.findMany({
-        where: { reviewerId: userId },
+        where: { reviewers: { some: { id: userId } } },
         orderBy: { createdAt: "desc" },
         include: reviewDetailInclude,
       }),
