@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { formatDateOnly, normalizeDateOnly } from "@/lib/date"
 import {
   addMember,
   createSprint,
@@ -107,7 +108,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       load()
-      if (role === "manager" || role === "super_admin") {
+      if (role === "manager" || role === "super_admin" || role === "ceo") {
         listUsers().then(setAllUsers).catch(() => {})
       }
     }, 0)
@@ -116,14 +117,14 @@ export default function ProjectDetailPage() {
 
   const canManage =
     Boolean(project) &&
-    (role === "super_admin" || (role === "manager" && project?.owner_id === user?.id))
+    (role === "super_admin" || role === "ceo" || (role === "manager" && project?.owner_id === user?.id))
 
   const memberIds = new Set(members.map((m) => m.id))
   const addable = allUsers.filter(
-    (u) => !memberIds.has(u.id) && (role === "super_admin" || u.role === "employee"),
+    (u) => !memberIds.has(u.id) && (role === "super_admin" || role === "ceo" || u.role === "employee"),
   )
   const leadCandidates =
-    role === "super_admin"
+    (role === "super_admin" || role === "ceo")
       ? allUsers
       : allUsers.filter((u) => u.id === project?.owner_id || (u.role === "employee" && memberIds.has(u.id)))
 
@@ -716,12 +717,12 @@ function ManageLeadDialog({
 
 function formatSprintDate(value: string | null) {
   if (!value) return "Not set"
-  return new Date(value).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+  return formatDateOnly(value, { month: "short", day: "numeric", year: "numeric" }) || "Not set"
 }
 
 function sprintDateInput(value: string | null) {
   if (!value) return ""
-  return new Date(value).toISOString().slice(0, 10)
+  return normalizeDateOnly(value)
 }
 
 function SprintCard({

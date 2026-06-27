@@ -140,6 +140,15 @@ export interface Sprint {
   updated_at: string | null
 }
 
+export interface ReviewAttachment {
+  id: number
+  review_request_id: number
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  created_at: string | null
+}
+
 export interface Review {
   id: number
   title: string
@@ -152,11 +161,13 @@ export interface Review {
   github_repo: string | null
   figma_link: string | null
   documentation_link: string | null
+  tech_details: any
   project_id: number | null
   submitter_id: number | null
   reviewer_id: number | null
   submitter: User | null
   reviewer: User | null
+  attachments?: ReviewAttachment[]
   created_at: string | null
   updated_at: string | null
 }
@@ -181,6 +192,7 @@ export interface ReviewCreate {
   figma_link?: string
   documentation_link?: string
   project_id?: number | null
+  reviewer_id?: number | null
 }
 
 // ---- Tasks ----
@@ -360,6 +372,20 @@ export async function onboard(token: string, password: string, full_name?: strin
   return res.access_token
 }
 
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  })
+}
+
 // ---- Users ----
 export const listUsers = () => request<User[]>("/users")
 
@@ -462,9 +488,18 @@ export const listReviews = (opts: { status?: ReviewStatus; projectId?: number } 
 
 export const getReview = (id: number) => request<Review>(`/reviews/${id}`)
 
-export const createReview = (data: ReviewCreate) =>
-  request<Review>("/reviews", { method: "POST", body: JSON.stringify(data) })
-
+export async function createReview(data: ReviewCreate | FormData): Promise<Review> {
+  if (data instanceof FormData) {
+    const res = await fetch(`${API_URL}/reviews`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: data,
+    })
+    if (!res.ok) throw new Error("Failed to create review")
+    return res.json() as Promise<Review>
+  }
+  return request<Review>("/reviews", { method: "POST", body: JSON.stringify(data) })
+}
 export const updateReview = (id: number, patch: Partial<Review>) =>
   request<Review>(`/reviews/${id}`, {
     method: "PATCH",

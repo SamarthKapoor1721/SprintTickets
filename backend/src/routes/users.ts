@@ -41,7 +41,6 @@ function normalizeNullableString(value: string | null | undefined) {
 usersRouter.get(
   "",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const skip = Number.isFinite(Number(req.query.skip))
       ? Math.max(0, parseIntStrict(req.query.skip, "skip"))

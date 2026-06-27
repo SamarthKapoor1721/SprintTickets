@@ -84,6 +84,8 @@ model User {
   authoredTaskComments TaskComment[] @relation("TaskCommentAuthor")
   reports          DailyProgressReport[] @relation("ReportSubmitter")
   onboardingToken  String?               @unique @map("onboarding_token")
+  resetPasswordToken String?             @unique @map("reset_password_token")
+  resetPasswordTokenExpiresAt DateTime?   @map("reset_password_token_expires_at")
 
   @@index([fullName])
   @@map("users")
@@ -139,6 +141,7 @@ model ReviewRequest {
   reviewerId         Int?            @map("reviewer_id")
   reviewer           User?           @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
   reviewComments     ReviewComment[]
+  attachments        ReviewAttachment[]
   createdAt          DateTime?       @default(now()) @map("created_at")
   updatedAt          DateTime?       @updatedAt @map("updated_at")
 
@@ -157,6 +160,20 @@ model ReviewComment {
 
   @@index([reviewRequestId, createdAt, id])
   @@map("review_comments")
+}
+
+model ReviewAttachment {
+  id              Int            @id @default(autoincrement())
+  reviewRequestId Int            @map("review_request_id")
+  reviewRequest   ReviewRequest  @relation(fields: [reviewRequestId], references: [id], onDelete: Cascade)
+  fileName        String         @map("file_name")
+  mimeType        String         @map("mime_type")
+  sizeBytes       Int            @map("size_bytes")
+  data            Bytes
+  createdAt       DateTime?      @default(now()) @map("created_at")
+
+  @@index([reviewRequestId])
+  @@map("review_attachments")
 }
 
 model Sprint {

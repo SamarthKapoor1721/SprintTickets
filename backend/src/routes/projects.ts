@@ -97,7 +97,7 @@ projectsRouter.get(
 projectsRouter.post(
   "",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     const body = parseBody(projectCreateSchema, req.body);
     if (!req.authUser) {
@@ -139,7 +139,7 @@ projectsRouter.get(
 projectsRouter.patch(
   "/:projectId",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -216,7 +216,7 @@ projectsRouter.patch(
 projectsRouter.delete(
   "/:projectId",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -268,7 +268,7 @@ projectsRouter.get(
 projectsRouter.post(
   "/:projectId/members",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -315,7 +315,7 @@ projectsRouter.post(
 projectsRouter.delete(
   "/:projectId/members/:userId",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     const userId = Number(req.params.userId);

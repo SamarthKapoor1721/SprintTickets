@@ -118,6 +118,7 @@ export function serializeReview(
   review: ReviewRequest & {
     submitter?: User | null;
     reviewer?: User | null;
+    attachments?: ReviewAttachment[];
   },
 ) {
   return {
@@ -138,8 +139,25 @@ export function serializeReview(
     reviewer_id: review.reviewerId,
     submitter: review.submitter ? serializeUser(review.submitter) : null,
     reviewer: review.reviewer ? serializeUser(review.reviewer) : null,
+    attachments: (review.attachments ?? []).map(a => ({
+      id: a.id,
+      file_name: a.fileName,
+      mime_type: a.mimeType,
+      size_bytes: a.sizeBytes,
+    })),
     created_at: review.createdAt,
     updated_at: review.updatedAt,
+  };
+}
+
+export function serializeReviewAttachment(attachment: ReviewAttachment) {
+  return {
+    id: attachment.id,
+    review_request_id: attachment.reviewRequestId,
+    file_name: attachment.fileName,
+    mime_type: attachment.mimeType,
+    size_bytes: attachment.sizeBytes,
+    created_at: attachment.createdAt,
   };
 }
 

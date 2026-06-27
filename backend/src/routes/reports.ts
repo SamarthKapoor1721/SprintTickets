@@ -206,7 +206,7 @@ reportsRouter.get(
 reportsRouter.post(
   "",
   requireAuth,
-  requireExactRoles(UserRole.employee, UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.employee, UserRole.manager),
   maybeParseMultipartReport,
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();

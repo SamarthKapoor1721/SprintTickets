@@ -171,7 +171,7 @@ tasksRouter.get(
 tasksRouter.post(
   "",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const body = parseBody(taskCreateSchema, req.body);
@@ -225,7 +225,7 @@ tasksRouter.get(
 tasksRouter.patch(
   "/:taskId",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const taskId = Number(req.params.taskId);
@@ -302,7 +302,7 @@ tasksRouter.patch(
 tasksRouter.delete(
   "/:taskId",
   requireAuth,
-  requireExactRoles(UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const taskId = Number(req.params.taskId);

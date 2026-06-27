@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { formatDateOnly, normalizeDateOnly, todayInputValue } from "@/lib/date"
 import {
   CalendarDays,
   CheckSquare,
@@ -53,16 +54,16 @@ import {
 const ACCEPTED_FILES = ".pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx,.csv,.md"
 
 function todayInput() {
-  return new Date().toISOString().slice(0, 10)
+  return todayInputValue()
 }
 
 function dateInput(value: string | null | undefined) {
   if (!value) return todayInput()
-  return new Date(value).toISOString().slice(0, 10)
+  return normalizeDateOnly(value) || todayInput()
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
+  return formatDateOnly(value, { weekday: "short", month: "short", day: "numeric" })
 }
 
 function formatBytes(bytes: number) {
@@ -75,7 +76,7 @@ export default function ReportsPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
   const canSummarize = role === "ceo" || role === "super_admin" || role === "manager"
-  const canCreateReport = role !== "ceo"
+  const canCreateReport = role !== "ceo" && role !== "super_admin"
 
   const [reports, setReports] = useState<Report[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -259,8 +260,8 @@ export default function ReportsPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           {reports.map((report) => {
             // Only the original submitter can edit or delete their own report.
-            // CEO is review-only; managers and super-admins can still work their own reports.
-            const canEdit = report.submitter_id === user?.id && role !== "ceo"
+            // CEO and admin are review-only; managers and employees can still work their own reports.
+            const canEdit = report.submitter_id === user?.id && role !== "ceo" && role !== "super_admin"
 
             return (
               <ReportCard

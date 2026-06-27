@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Sparkles,
   X,
+  FileText,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -51,6 +52,12 @@ const LINKS: { key: keyof Review; label: string }[] = [
 
 function initials(name?: string | null) {
   return (name ?? "?").slice(0, 1).toUpperCase()
+}
+
+function ensureAbsoluteUrl(url: string) {
+  if (!url) return "#"
+  if (url.startsWith("http://") || url.startsWith("https://")) return url
+  return `https://${url}`
 }
 
 export default function ReviewDetailPage() {
@@ -282,13 +289,43 @@ export default function ReviewDetailPage() {
                 {links.map(({ key, label }) => (
                   <a
                     key={key}
-                    href={String(review[key])}
+                    href={ensureAbsoluteUrl(String(review[key]))}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
                   >
                     {label} <ExternalLink className="h-3 w-3" />
                   </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {review.attachments && review.attachments.length > 0 && (
+            <div className="pt-2">
+              <p className="mb-2 text-slate-400">Attachments</p>
+              <div className="flex flex-col gap-2">
+                {review.attachments.map((a) => (
+                  <div key={a.id} className="flex items-center gap-3 overflow-hidden rounded-[8px] border border-slate-200 bg-slate-50">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-slate-100">
+                      <FileText className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <div className="min-w-0 flex-1 py-1">
+                      <p className="truncate text-[13px] font-medium text-slate-700">{a.file_name}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {a.size_bytes < 1024 * 1024
+                          ? `${(a.size_bytes / 1024).toFixed(1)} KB`
+                          : `${(a.size_bytes / (1024 * 1024)).toFixed(1)} MB`}
+                      </p>
+                    </div>
+                    <a
+                      href={`/api/v1/reviews/${review.id}/attachments/${a.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mr-3 flex h-8 w-8 items-center justify-center rounded-[6px] text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
                 ))}
               </div>
             </div>

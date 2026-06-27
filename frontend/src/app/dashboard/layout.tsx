@@ -49,12 +49,13 @@ function DashboardContent({ children }: { children: ReactNode }) {
   }
 
   const role = user.role
+  const isReviewer = role === "ceo" || role === "super_admin"
   const meta = PAGE_META.find((m) => m.match(pathname)) ?? PAGE_META[0]
   const initials = (user.full_name ?? user.email ?? "?").slice(0, 1).toUpperCase()
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Users", href: "/dashboard/users", icon: Users },
+    ...(role !== "employee" ? [{ name: "Users", href: "/dashboard/users", icon: Users }] : []),
     { name: "Teams", href: "/dashboard/projects", icon: FolderKanban },
     { name: "Tasks", href: "/dashboard/tasks", icon: ClipboardList },
     { name: "Reports", href: "/dashboard/reports", icon: FileText },
@@ -87,13 +88,15 @@ function DashboardContent({ children }: { children: ReactNode }) {
         </button>
       </div>
 
-      {/* New review button */}
-      <Link href="/dashboard/reviews/new" onClick={onNav}>
-        <button className={`mb-4 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-primary text-[13.5px] font-semibold text-white shadow-lg shadow-primary/24 transition-colors hover:bg-blue-700 cursor-pointer ${collapsed ? "px-0" : ""}`}>
-          <Plus className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={2.4} />
-          {!collapsed && "New review"}
-        </button>
-      </Link>
+      {/* New review button — hidden for CEO / admin (they review, not submit) */}
+      {!isReviewer && (
+        <Link href="/dashboard/reviews/new" onClick={onNav}>
+          <button className={`mb-4 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-primary text-[13.5px] font-semibold text-white shadow-lg shadow-primary/24 transition-colors hover:bg-blue-700 cursor-pointer ${collapsed ? "px-0" : ""}`}>
+            <Plus className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={2.4} />
+            {!collapsed && "New review"}
+          </button>
+        </Link>
+      )}
 
       {!collapsed && (
         <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
