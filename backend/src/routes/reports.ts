@@ -7,9 +7,9 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/async-handler";
 import { parseBody, parseIntStrict, parseOptionalInt } from "../lib/validation";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireExactRoles } from "../middleware/auth";
 import { serializeReport } from "../lib/serializers";
-import { canManageProject, hasMinimumRole, projectAccessWhere, reportAccessWhere, taskAccessWhere } from "../lib/rbac";
+import { canManageProject, projectAccessWhere, reportAccessWhere, taskAccessWhere } from "../lib/rbac";
 import { sendReportNotificationEmail } from "../lib/email";
 
 export const reportsRouter = Router();
@@ -157,7 +157,7 @@ function canMutateReport(
   authUser: { id: number; role: UserRole },
   report: { submitterId: number; project?: { ownerId: number | null } | null },
 ) {
-  if (hasMinimumRole(authUser.role, UserRole.ceo)) return true;
+  if (authUser.role === UserRole.super_admin) return true;
   if (report.submitterId === authUser.id) return true;
   if (authUser.role === UserRole.manager && report.project) {
     return canManageProject(authUser, report.project.ownerId);
@@ -206,6 +206,7 @@ reportsRouter.get(
 reportsRouter.post(
   "",
   requireAuth,
+  requireExactRoles(UserRole.employee, UserRole.manager, UserRole.super_admin),
   maybeParseMultipartReport,
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();

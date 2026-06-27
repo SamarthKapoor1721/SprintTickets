@@ -16,12 +16,12 @@ export function isSuperAdmin(userRole: UserRole): boolean {
 }
 
 export function canManageProject(currentUser: { id: number; role: UserRole }, ownerId: number | null): boolean {
-  if (hasMinimumRole(currentUser.role, UserRole.ceo)) return true;
+  if (currentUser.role === UserRole.super_admin) return true;
   return currentUser.id === ownerId;
 }
 
 export function canManageTask(currentUser: { id: number; role: UserRole }, projectOwnerId: number | null): boolean {
-  if (hasMinimumRole(currentUser.role, UserRole.ceo)) return true;
+  if (currentUser.role === UserRole.super_admin) return true;
   return currentUser.id === projectOwnerId;
 }
 
@@ -76,8 +76,6 @@ export function reportAccessWhere(currentUser: { id: number; role: UserRole }) {
   return { submitterId: currentUser.id };
 }
 
-export function canManageUser(currentUserRole: UserRole, targetUserRole: UserRole): boolean {
-  if (currentUserRole === UserRole.super_admin) return true;
-  if (currentUserRole === UserRole.ceo && (targetUserRole === UserRole.manager || targetUserRole === UserRole.employee)) return true;
-  return false;
+export function canManageUser(currentUserRole: UserRole, _targetUserRole: UserRole): boolean {
+  return currentUserRole === UserRole.super_admin;
 }

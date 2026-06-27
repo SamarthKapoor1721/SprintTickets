@@ -40,8 +40,8 @@ export default function UsersPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
 
-  const canManage = role === "ceo" || role === "super_admin"
-  const canOpenProfiles = canManage
+  const canManage = role === "super_admin"
+  const canViewProfiles = role === "ceo" || role === "super_admin"
 
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -119,10 +119,7 @@ export default function UsersPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {members.map((u) => {
                   const canDelete =
-                    (role === "super_admin" && u.id !== user?.id) ||
-                    (role === "ceo" &&
-                      (u.role === "manager" || u.role === "employee") &&
-                      u.id !== user?.id)
+                    role === "super_admin" && u.id !== user?.id
                   return (
                     <motion.div key={u.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                       <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg">
@@ -146,7 +143,7 @@ export default function UsersPage() {
                             <span className="text-xs text-slate-400">
                               {u.department ?? "No team"}
                             </span>
-                            {canOpenProfiles && (
+                            {canViewProfiles && (
                               <div className="flex items-center gap-2">
                                 <Link
                                   href={`/dashboard/users/${u.id}`}
@@ -155,13 +152,15 @@ export default function UsersPage() {
                                   <Eye className="h-3.5 w-3.5" />
                                   View
                                 </Link>
-                                <Link
-                                  href={`/dashboard/users/${u.id}?edit=1`}
-                                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  Edit
-                                </Link>
+                                {canManage && (
+                                  <Link
+                                    href={`/dashboard/users/${u.id}?edit=1`}
+                                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit
+                                  </Link>
+                                )}
                               </div>
                             )}
                           </div>

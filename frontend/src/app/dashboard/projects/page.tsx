@@ -60,7 +60,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const canManage = role === "ceo" || role === "manager" || role === "super_admin"
+  const canManage = role === "manager" || role === "super_admin"
 
   const refresh = useCallback(() => {
     setLoading(true)

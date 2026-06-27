@@ -10,7 +10,7 @@ import { prisma } from "../lib/prisma";
 import { canManageUser } from "../lib/rbac";
 import { serializeUser, serializeUserDetail } from "../lib/serializers";
 import { parseBody, parseIntStrict } from "../lib/validation";
-import { requireAuth, requireRoles } from "../middleware/auth";
+import { requireAuth, requireRoles, requireExactRoles } from "../middleware/auth";
 
 export const usersRouter = Router();
 
@@ -168,7 +168,7 @@ const userUpdateSchema = z.object({
 usersRouter.post(
   "",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.super_admin),
+  requireExactRoles(UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const body = parseBody(userCreateSchema, req.body);
@@ -215,7 +215,7 @@ usersRouter.post(
 usersRouter.patch(
   "/:id",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.super_admin),
+  requireExactRoles(UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const targetId = parseIntStrict(req.params.id, "id");
@@ -295,7 +295,7 @@ usersRouter.patch(
 usersRouter.delete(
   "/:id",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.super_admin),
+  requireExactRoles(UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const targetId = parseIntStrict(req.params.id, "id");
