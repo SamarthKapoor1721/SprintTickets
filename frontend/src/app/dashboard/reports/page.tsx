@@ -75,6 +75,7 @@ export default function ReportsPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
   const canSummarize = role === "ceo" || role === "super_admin" || role === "manager"
+  const canCreateReport = role !== "ceo"
 
   const [reports, setReports] = useState<Report[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -161,7 +162,7 @@ export default function ReportsPage() {
               AI Summary
             </Button>
           )}
-          <ReportDialog mode="create" projects={projects} tasks={tasks} onSaved={load} />
+          {canCreateReport && <ReportDialog mode="create" projects={projects} tasks={tasks} onSaved={load} />}
         </div>
       </div>
 
@@ -258,8 +259,8 @@ export default function ReportsPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           {reports.map((report) => {
             // Only the original submitter can edit or delete their own report.
-            // CEO/manager/super_admin are read-only reviewers.
-            const canEdit = report.submitter_id === user?.id
+            // CEO is review-only; managers and super-admins can still work their own reports.
+            const canEdit = report.submitter_id === user?.id && role !== "ceo"
 
             return (
               <ReportCard

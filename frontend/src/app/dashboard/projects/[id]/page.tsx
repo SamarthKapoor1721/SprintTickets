@@ -107,7 +107,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       load()
-      if (role === "ceo" || role === "manager" || role === "super_admin") {
+      if (role === "manager" || role === "super_admin") {
         listUsers().then(setAllUsers).catch(() => {})
       }
     }, 0)
@@ -116,10 +116,16 @@ export default function ProjectDetailPage() {
 
   const canManage =
     Boolean(project) &&
-    (role === "ceo" || role === "super_admin" || project?.owner_id === user?.id)
+    (role === "super_admin" || (role === "manager" && project?.owner_id === user?.id))
 
   const memberIds = new Set(members.map((m) => m.id))
-  const addable = allUsers.filter((u) => !memberIds.has(u.id))
+  const addable = allUsers.filter(
+    (u) => !memberIds.has(u.id) && (role === "super_admin" || u.role === "employee"),
+  )
+  const leadCandidates =
+    role === "super_admin"
+      ? allUsers
+      : allUsers.filter((u) => u.id === project?.owner_id || (u.role === "employee" && memberIds.has(u.id)))
 
   const handleAdd = async () => {
     if (!selected) return
@@ -281,10 +287,11 @@ export default function ProjectDetailPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <ManageLeadDialog
                       project={project}
-                      users={allUsers}
+                      users={leadCandidates}
                       onSaved={handleLeadChange}
                       triggerLabel="Change lead"
                       triggerVariant="outline"
+                      currentRole={role}
                     />
                     <Button
                       variant="ghost"
@@ -314,10 +321,11 @@ export default function ProjectDetailPage() {
                 {canManage && (
                   <ManageLeadDialog
                     project={project}
-                    users={allUsers}
+                    users={leadCandidates}
                     onSaved={handleLeadChange}
                     triggerLabel="Assign lead"
                     triggerVariant="default"
+                    currentRole={role}
                   />
                 )}
               </div>
@@ -601,12 +609,14 @@ function ManageLeadDialog({
   onSaved,
   triggerLabel,
   triggerVariant,
+  currentRole,
 }: {
   project: Project
   users: User[]
   onSaved: (ownerId: number | null) => Promise<void> | void
   triggerLabel: string
   triggerVariant: "default" | "outline"
+  currentRole: string
 }) {
   const [open, setOpen] = useState(false)
   const [selectedOwnerId, setSelectedOwnerId] = useState("")
@@ -657,7 +667,9 @@ function ManageLeadDialog({
         <DialogHeader>
           <DialogTitle>Manage team lead</DialogTitle>
           <DialogDescription className="text-slate-500">
-            Move the lead role to another user or clear it completely.
+            {currentRole === "manager"
+              ? "Managers can only move the lead to an employee already on the team."
+              : "Move the lead role to another user or clear it completely."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">

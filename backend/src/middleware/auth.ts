@@ -50,3 +50,18 @@ export function requireRoles(...roles: UserRole[]) {
     next();
   });
 }
+
+export function requireExactRoles(...roles: UserRole[]) {
+  return asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.authUser) {
+      throw unauthorized();
+    }
+    if (isSuperAdmin(req.authUser.role)) {
+      return next();
+    }
+    if (!roles.includes(req.authUser.role)) {
+      throw forbidden();
+    }
+    next();
+  });
+}

@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/async-handler";
 import { parseBody, parseIntStrict, parseOptionalInt } from "../lib/validation";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error";
-import { requireAuth, requireRoles } from "../middleware/auth";
+import { requireAuth, requireExactRoles } from "../middleware/auth";
 import { serializeSprint } from "../lib/serializers";
 import { canManageProject, projectAccessWhere } from "../lib/rbac";
 
@@ -91,7 +91,7 @@ sprintsRouter.get(
 sprintsRouter.post(
   "",
   requireAuth,
-  requireRoles(UserRole.manager, UserRole.ceo, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const body = parseBody(sprintCreateSchema, req.body);
@@ -119,7 +119,7 @@ sprintsRouter.post(
 sprintsRouter.patch(
   "/:sprintId",
   requireAuth,
-  requireRoles(UserRole.manager, UserRole.ceo, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const sprintId = Number(req.params.sprintId);
@@ -162,7 +162,7 @@ sprintsRouter.patch(
 sprintsRouter.delete(
   "/:sprintId",
   requireAuth,
-  requireRoles(UserRole.manager, UserRole.ceo, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const sprintId = Number(req.params.sprintId);

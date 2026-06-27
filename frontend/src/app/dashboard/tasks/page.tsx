@@ -108,7 +108,7 @@ function teamUsers(project?: Project | null) {
 export default function TasksPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
-  const canManage = role === "ceo" || role === "manager" || role === "super_admin"
+  const canManage = role === "manager" || role === "super_admin"
 
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -462,6 +462,8 @@ function TaskDialog({
   onSaved: () => void
   trigger?: ReactElement
 }) {
+  const { user } = useAuth()
+  const role = user?.role ?? "employee"
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState(task?.title ?? "")
   const [description, setDescription] = useState(task?.description ?? "")
@@ -483,9 +485,11 @@ function TaskDialog({
   const selectedProject = projects.find((project) => project.id === Number(projectId)) ?? task?.project
   const team = teamUsers(selectedProject)
   const teamIds = new Set(team.map((member) => member.id))
-  const otherEmployees = allUsers.filter((u) => !teamIds.has(u.id))
+  const otherEmployees = allUsers.filter(
+    (u) => !teamIds.has(u.id) && (role === "super_admin" || u.role === "employee"),
+  )
 
-  // Group other employees by their team/department for the assignee dropdown
+  // Group other employees by their team/department for the assignee dropdown.
   const knownDepts = new Set(TEAMS as readonly string[])
   const otherByTeam: { label: string; members: User[] }[] = TEAMS.map((t) => ({
     label: t,
@@ -751,7 +755,7 @@ function TaskDialog({
               </div>
               <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-500">
                 <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
-                Assigning an employee outside the project team adds them to it automatically.
+                Assigning an eligible user outside the project team adds them to it automatically.
               </div>
             </div>
           )}

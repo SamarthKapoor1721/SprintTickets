@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/async-handler";
 import { parseBody, parseIntStrict, parseOptionalInt } from "../lib/validation";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireExactRoles } from "../middleware/auth";
 import { serializeTask, serializeTaskComment } from "../lib/serializers";
 import { canManageTask, hasMinimumRole, taskAccessWhere } from "../lib/rbac";
 import { sendTaskCommentEmail } from "../lib/email";
@@ -67,7 +67,11 @@ function andWhere(...parts: Prisma.TaskWhereInput[]) {
   return { AND: cleaned };
 }
 
-async function assertAssignable(projectId: number, assigneeId: number | null | undefined) {
+async function assertAssignable(
+  projectId: number,
+  assigneeId: number | null | undefined,
+  authUser: { id: number; role: UserRole },
+) {
   if (assigneeId == null) return;
 
   const project = await prisma.project.findUnique({
@@ -85,7 +89,10 @@ async function assertAssignable(projectId: number, assigneeId: number | null | u
     project.ownerId === assigneeId ||
     project.memberships.some((member) => member.userId === assigneeId);
   if (!belongsToTeam) {
-    // Auto-add the assignee to the project team so any employee can be assigned.
+    if (authUser.role === UserRole.manager && user.role !== UserRole.employee) {
+      throw forbidden("Managers can only assign employees outside the team");
+    }
+    // Auto-add the assignee to the project team when they are allowed to join it.
     await prisma.projectMember.create({
       data: { projectId, userId: assigneeId },
     });
@@ -164,6 +171,7 @@ tasksRouter.get(
 tasksRouter.post(
   "",
   requireAuth,
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const body = parseBody(taskCreateSchema, req.body);
@@ -175,7 +183,7 @@ tasksRouter.post(
       throw forbidden("Not allowed to create tasks for this project");
     }
 
-    await assertAssignable(body.project_id, body.assignee_id);
+    await assertAssignable(body.project_id, body.assignee_id, req.authUser);
     await assertSprintBelongsToProject(body.project_id, body.sprint_id);
     const dueDate = nullableDate(body.due_date);
 
@@ -217,6 +225,7 @@ tasksRouter.get(
 tasksRouter.patch(
   "/:taskId",
   requireAuth,
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const taskId = Number(req.params.taskId);
@@ -264,7 +273,7 @@ tasksRouter.patch(
       }
     }
 
-    await assertAssignable(nextProjectId, body.assignee_id);
+    await assertAssignable(nextProjectId, body.assignee_id, req.authUser);
     await assertSprintBelongsToProject(nextProjectId, body.sprint_id);
     const dueDate = nullableDate(body.due_date);
 
@@ -293,6 +302,7 @@ tasksRouter.patch(
 tasksRouter.delete(
   "/:taskId",
   requireAuth,
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const taskId = Number(req.params.taskId);

@@ -157,16 +157,14 @@ export default function UserDetailPage() {
   const canEditTarget = Boolean(
     me &&
       detail &&
-      (me.role === "super_admin" ||
-        me.id === detail.id ||
-        (me.role === "ceo" && detail.role !== "super_admin")),
+      me.role === "super_admin",
   )
 
   const canDeleteTarget = Boolean(
     me &&
       detail &&
       me.id !== detail.id &&
-      (me.role === "super_admin" || (me.role === "ceo" && detail.role !== "super_admin")),
+      me.role === "super_admin",
   )
 
   const handleDelete = async () => {
@@ -814,10 +812,7 @@ function EditUserDialog({
   const [err, setErr] = useState<string | null>(null)
 
   const isSelf = viewer?.id === target.id
-  const canChangeRole =
-    !isSelf &&
-    (viewer?.role === "super_admin" ||
-      (viewer?.role === "ceo" && target.role !== "super_admin"))
+  const canChangeRole = !isSelf && viewer?.role === "super_admin"
   const canToggleActive = !isSelf
   const roleOptions: Role[] =
     viewer?.role === "super_admin" ? ["employee", "manager", "ceo"] : ["employee", "manager"]

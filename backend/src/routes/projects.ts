@@ -7,7 +7,7 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/async-handler";
 import { parseBody, parseIntStrict } from "../lib/validation";
 import { forbidden, notFound, unauthorized } from "../lib/http-error";
-import { requireAuth, requireRoles } from "../middleware/auth";
+import { requireAuth, requireExactRoles } from "../middleware/auth";
 import { serializeProject, serializeUser } from "../lib/serializers";
 import { canManageProject, hasMinimumRole, isSuperAdmin } from "../lib/rbac";
 
@@ -60,7 +60,7 @@ projectsRouter.get(
       throw unauthorized();
     }
 
-    const cacheKey = `projects:list`;
+    const cacheKey = `projects:list:${req.authUser.id}:${req.authUser.role}:${skip}:${limit}`;
     const cached = await cacheGet<unknown[]>(cacheKey);
     if (cached) {
       res.json(cached);
@@ -97,7 +97,7 @@ projectsRouter.get(
 projectsRouter.post(
   "",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const body = parseBody(projectCreateSchema, req.body);
     if (!req.authUser) {
@@ -118,7 +118,7 @@ projectsRouter.post(
       },
     });
 
-    await cacheInvalidate("projects:list");
+    await cacheInvalidate("projects:list:*");
     res.status(201).json(serializeProject(project));
   }),
 );
@@ -139,14 +139,17 @@ projectsRouter.get(
 projectsRouter.patch(
   "/:projectId",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
       throw notFound("Project not found");
     }
     const body = parseBody(projectUpdateSchema, req.body);
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { memberships: true },
+    });
     if (!project) {
       throw notFound("Project not found");
     }
@@ -164,6 +167,13 @@ projectsRouter.patch(
       const nextOwner = await prisma.user.findUnique({ where: { id: nextOwnerId } });
       if (!nextOwner) {
         throw notFound("User not found");
+      }
+      if (
+        req.authUser.role === UserRole.manager &&
+        nextOwnerId !== project.ownerId &&
+        !project.memberships.some((member) => member.userId === nextOwnerId)
+      ) {
+        throw forbidden("Managers can only transfer the lead to an existing team member");
       }
     }
 
@@ -198,7 +208,7 @@ projectsRouter.patch(
       throw notFound("Project not found");
     }
 
-    await cacheInvalidate("projects:list");
+    await cacheInvalidate("projects:list:*");
     res.json(serializeProject(updated));
   }),
 );
@@ -206,7 +216,7 @@ projectsRouter.patch(
 projectsRouter.delete(
   "/:projectId",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -217,7 +227,7 @@ projectsRouter.delete(
       throw notFound("Project not found");
     }
     if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
-      throw forbidden("Only the team lead or CEO can delete this project");
+      throw forbidden("Only the team lead or admin can delete this project");
     }
 
     await prisma.$transaction([
@@ -233,7 +243,7 @@ projectsRouter.delete(
       }),
     ]);
 
-    await cacheInvalidate("projects:list");
+    await cacheInvalidate("projects:list:*");
     res.status(204).send();
   }),
 );
@@ -258,7 +268,7 @@ projectsRouter.get(
 projectsRouter.post(
   "/:projectId/members",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     if (!Number.isInteger(projectId)) {
@@ -267,12 +277,15 @@ projectsRouter.post(
     const body = parseBody(projectMemberAddSchema, req.body);
     const project = await getProjectOrThrow(projectId);
     if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
-      throw forbidden("Only the project owner or CEO can add members");
+      throw forbidden("Only the project owner or admin can add members");
     }
 
     const user = await prisma.user.findUnique({ where: { id: body.user_id } });
     if (!user) {
       throw notFound("User not found");
+    }
+    if (req.authUser.role === UserRole.manager && user.role !== UserRole.employee) {
+      throw forbidden("Managers can only add employees to a team");
     }
 
     await prisma.projectMember.upsert({
@@ -294,6 +307,7 @@ projectsRouter.post(
       include: { user: true },
     });
 
+    await cacheInvalidate("projects:list:*");
     res.status(201).json(members.map((member) => serializeUser(member.user)));
   }),
 );
@@ -301,7 +315,7 @@ projectsRouter.post(
 projectsRouter.delete(
   "/:projectId/members/:userId",
   requireAuth,
-  requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
+  requireExactRoles(UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
     const projectId = Number(req.params.projectId);
     const userId = Number(req.params.userId);
@@ -310,7 +324,14 @@ projectsRouter.delete(
     }
     const project = await getProjectOrThrow(projectId);
     if (!req.authUser || !canManageProject(req.authUser, project.ownerId)) {
-      throw forbidden("Only the project owner or CEO can remove members");
+      throw forbidden("Only the project owner or admin can remove members");
+    }
+    const targetUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!targetUser) {
+      throw notFound("User not found");
+    }
+    if (req.authUser.role === UserRole.manager && targetUser.role !== UserRole.employee) {
+      throw forbidden("Managers can only remove employees from a team");
     }
 
     await prisma.projectMember.deleteMany({
@@ -322,6 +343,7 @@ projectsRouter.delete(
       include: { user: true },
     });
 
+    await cacheInvalidate("projects:list:*");
     res.json(members.map((member) => serializeUser(member.user)));
   }),
 );
