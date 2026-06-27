@@ -19,6 +19,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   addReviewComment,
   getAISummary,
   getReview,
@@ -60,6 +66,20 @@ function ensureAbsoluteUrl(url: string) {
   return `https://${url}`
 }
 
+function formatRole(role?: string) {
+  if (!role) return ""
+  if (role === "super_admin") return "Admin"
+  if (role === "ceo") return "CEO"
+  return role.charAt(0).toUpperCase() + role.slice(1)
+}
+
+function formatUser(user?: { full_name?: string | null; email?: string; role?: string } | null, fallback = "—") {
+  if (!user) return fallback
+  const name = user.full_name || user.email || fallback
+  const r = formatRole(user.role)
+  return r ? `${name} (${r})` : name
+}
+
 export default function ReviewDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -78,6 +98,7 @@ export default function ReviewDetailPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<{ url: string; title: string } | null>(null)
 
   const canDecide = role === "ceo" || role === "manager" || role === "super_admin"
 
@@ -275,28 +296,36 @@ export default function ReviewDetailPage() {
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div>
               <p className="mb-1 text-slate-400">Submitted by</p>
-              <p className="text-slate-700">{review.submitter?.full_name ?? "—"}</p>
+              <p className="text-slate-700">{formatUser(review.submitter, "—")}</p>
             </div>
             <div>
-              <p className="mb-1 text-slate-400">Reviewer</p>
-              <p className="text-slate-700">{review.reviewer?.full_name ?? "Unassigned"}</p>
+              <p className="mb-1 text-slate-400">Reviewers</p>
+              <div className="flex flex-col gap-1">
+                {review.reviewers && review.reviewers.length > 0 
+                  ? review.reviewers.map(r => (
+                      <p key={r.id} className="text-slate-700">{formatUser(r, "Unassigned")}</p>
+                    ))
+                  : <p className="text-slate-700">Unassigned</p>
+                }
+              </div>
             </div>
           </div>
           {links.length > 0 && (
             <div className="pt-2">
               <p className="mb-2 text-slate-400">Deliverables</p>
               <div className="flex flex-wrap gap-2">
-                {links.map(({ key, label }) => (
-                  <a
-                    key={key}
-                    href={ensureAbsoluteUrl(String(review[key]))}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
-                  >
-                    {label} <ExternalLink className="h-3 w-3" />
-                  </a>
-                ))}
+                {links.map(({ key, label }) => {
+                  const url = ensureAbsoluteUrl(String(review[key]))
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setPreviewUrl({ url, title: label })}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
+                    >
+                      {label} <ExternalLink className="h-3 w-3" />
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -317,14 +346,17 @@ export default function ReviewDetailPage() {
                           : `${(a.size_bytes / (1024 * 1024)).toFixed(1)} MB`}
                       </p>
                     </div>
-                    <a
-                      href={`/api/v1/reviews/${review.id}/attachments/${a.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mr-3 flex h-8 w-8 items-center justify-center rounded-[6px] text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                    <button
+                      onClick={() =>
+                        setPreviewUrl({
+                          url: `/api/v1/reviews/${review.id}/attachments/${a.id}`,
+                          title: a.file_name,
+                        })
+                      }
+                      className="mr-3 flex h-8 w-8 items-center justify-center rounded-[6px] text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 cursor-pointer"
                     >
                       <ExternalLink className="h-4 w-4" />
-                    </a>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -332,6 +364,24 @@ export default function ReviewDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
+        <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b shrink-0 bg-white">
+            <DialogTitle className="text-lg text-slate-900">{previewUrl?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 bg-slate-100">
+            {previewUrl && (
+              <iframe
+                src={previewUrl.url}
+                className="w-full h-full border-none"
+                title={previewUrl.title}
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card className="glass border-none">
         <CardHeader>

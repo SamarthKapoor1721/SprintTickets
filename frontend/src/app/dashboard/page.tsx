@@ -45,6 +45,20 @@ function greetingWord() {
   return "Good evening"
 }
 
+function formatRole(role?: string) {
+  if (!role) return ""
+  if (role === "super_admin") return "Admin"
+  if (role === "ceo") return "CEO"
+  return role.charAt(0).toUpperCase() + role.slice(1)
+}
+
+function formatUser(user?: { full_name?: string | null; email?: string; role?: string } | null, fallback = "Someone") {
+  if (!user) return fallback
+  const name = user.full_name || user.email || fallback
+  const r = formatRole(user.role)
+  return r ? `${name} (${r})` : name
+}
+
 // ── Page ─────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter()
@@ -156,13 +170,14 @@ export default function DashboardPage() {
       new Date(b.updated_at ?? b.created_at ?? 0).getTime() - new Date(a.updated_at ?? a.created_at ?? 0).getTime()
     )
     return sorted.slice(0, 5).map(r => {
+      const reviewerStr = r.reviewers?.length ? r.reviewers.map(rev => formatUser(rev, "Reviewer")).join(", ") : "Reviewer"
       if (r.status === "approved")
-        return { dot: "#16a34a", who: r.reviewer?.full_name ?? "CEO", text: `approved "${r.title}"`, time: timeAgo(r.updated_at) }
+        return { dot: "#16a34a", who: reviewerStr, text: `approved "${r.title}"`, time: timeAgo(r.updated_at) }
       if (r.status === "needs_changes")
-        return { dot: "#7c3aed", who: r.reviewer?.full_name ?? "CEO", text: `requested changes on "${r.title}"`, time: timeAgo(r.updated_at) }
+        return { dot: "#7c3aed", who: reviewerStr, text: `requested changes on "${r.title}"`, time: timeAgo(r.updated_at) }
       if (r.status === "rejected")
-        return { dot: "#dc2626", who: r.reviewer?.full_name ?? "CEO", text: `rejected "${r.title}"`, time: timeAgo(r.updated_at) }
-      return { dot: "#2563eb", who: r.submitter?.full_name ?? "Someone", text: `submitted "${r.title}" for review`, time: timeAgo(r.created_at) }
+        return { dot: "#dc2626", who: reviewerStr, text: `rejected "${r.title}"`, time: timeAgo(r.updated_at) }
+      return { dot: "#2563eb", who: formatUser(r.submitter, "Someone"), text: `submitted "${r.title}" for review`, time: timeAgo(r.created_at) }
     })
   }, [reviews])
 

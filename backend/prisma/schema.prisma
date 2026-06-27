@@ -74,7 +74,7 @@ model User {
   isActive         Boolean          @default(true) @map("is_active")
   ownedProjects    Project[]        @relation("ProjectOwner")
   submittedReviews ReviewRequest[]  @relation("ReviewSubmitter")
-  reviewedReviews  ReviewRequest[]  @relation("ReviewReviewer")
+  reviewedReviews  ReviewRequest[]  @relation("ReviewReviewers")
   authoredReviewComments ReviewComment[] @relation("ReviewCommentAuthor")
   sentDirectMessages     DirectMessage[]  @relation("DirectMessageSender")
   receivedDirectMessages DirectMessage[]  @relation("DirectMessageRecipient")
@@ -138,8 +138,7 @@ model ReviewRequest {
   project            Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   submitterId        Int?            @map("submitter_id")
   submitter          User?           @relation("ReviewSubmitter", fields: [submitterId], references: [id], onDelete: SetNull)
-  reviewerId         Int?            @map("reviewer_id")
-  reviewer           User?           @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewers          User[]          @relation("ReviewReviewers")
   reviewComments     ReviewComment[]
   attachments        ReviewAttachment[]
   createdAt          DateTime?       @default(now()) @map("created_at")

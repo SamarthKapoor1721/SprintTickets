@@ -40,7 +40,7 @@ export default function UsersPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
 
-  const canManage = role === "super_admin"
+  const canManage = role === "super_admin" || role === "ceo"
   const canViewProfiles = role === "ceo" || role === "super_admin"
 
   const [users, setUsers] = useState<User[]>([])
@@ -119,7 +119,7 @@ export default function UsersPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {members.map((u) => {
                   const canDelete =
-                    role === "super_admin" && u.id !== user?.id
+                    (role === "super_admin" || role === "ceo") && u.id !== user?.id
                   return (
                     <motion.div key={u.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                       <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg">
