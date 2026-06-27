@@ -60,35 +60,22 @@ function DialogContent({
         {...props}
       >
         {showCloseButton && (
-          onClose ? (
-            <button
-              type="button"
-              aria-label="Close dialog"
-              onClick={onClose}
-              className={cn(
-                "absolute top-2 right-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              )}
-            >
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </button>
-          ) : (
-            <DialogPrimitive.Close
-              data-slot="dialog-close"
-              render={
-                <button
-                  type="button"
-                  aria-label="Close dialog"
-                  className={cn(
-                    "absolute top-2 right-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  )}
-                />
-              }
-            >
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </DialogPrimitive.Close>
-          )
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            onClick={onClose ? () => onClose() : undefined}
+            render={
+              <button
+                type="button"
+                aria-label="Close dialog"
+                className={cn(
+                  "absolute top-2 right-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                )}
+              />
+            }
+          >
+            <XIcon className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
         )}
         {children}
       </DialogPrimitive.Popup>
@@ -125,7 +112,7 @@ function DialogFooter({
     >
       {children}
       {showCloseButton && (
-        <DialogPrimitive.Close
+        <DialogClose
           render={
             <button
               type="button"
@@ -134,7 +121,7 @@ function DialogFooter({
           }
         >
           Close
-        </DialogPrimitive.Close>
+        </DialogClose>
       )}
     </div>
   )
