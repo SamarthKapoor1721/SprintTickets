@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { formatDateOnly, normalizeDateOnly, todayInputValue } from "@/lib/date"
 import { FilePreviewModal, isPreviewable } from "@/components/file-preview"
 import {
+  ArrowUpDown,
   CalendarDays,
   CheckSquare,
   Clock3,
@@ -45,6 +46,7 @@ import {
   Edit3,
   Eye,
   FileText,
+  Search,
   Paperclip,
   Plus,
   ShieldAlert,
@@ -69,6 +71,16 @@ function formatDate(value: string) {
   return formatDateOnly(value, { weekday: "short", month: "short", day: "numeric" })
 }
 
+const REPORT_AVATAR_COLORS = ["#2563eb", "#0d9488", "#7c3aed", "#db2777", "#ea580c", "#0891b2"]
+function avatarColor(seed: number) {
+  return REPORT_AVATAR_COLORS[seed % REPORT_AVATAR_COLORS.length]
+}
+function reportInitials(name?: string | null) {
+  if (!name) return "?"
+  const parts = name.trim().split(/\s+/)
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase().slice(0, 2) || "?"
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
@@ -85,6 +97,9 @@ export default function ReportsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [projectFilter, setProjectFilter] = useState("")
+  const [blockersOnly, setBlockersOnly] = useState(false)
+  const [reportSort, setReportSort] = useState<"newest" | "oldest" | "minutes">("newest")
+  const [reportQuery, setReportQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
@@ -147,6 +162,27 @@ export default function ReportsPage() {
       attachments: reports.reduce((sum, report) => sum + report.attachments.length, 0),
     }
   }, [reports])
+
+  const visibleReports = useMemo(() => {
+    let list = reports
+    if (blockersOnly) list = list.filter((r) => r.blockers?.trim())
+    if (reportQuery.trim()) {
+      const q = reportQuery.toLowerCase()
+      list = list.filter(
+        (r) =>
+          (r.submitter?.full_name ?? r.submitter?.email ?? "").toLowerCase().includes(q) ||
+          (r.project?.name ?? "").toLowerCase().includes(q),
+      )
+    }
+    const sorted = [...list]
+    sorted.sort((a, b) => {
+      if (reportSort === "minutes") return (b.minutes_spent ?? 0) - (a.minutes_spent ?? 0)
+      const ta = new Date(a.date ?? 0).getTime()
+      const tb = new Date(b.date ?? 0).getTime()
+      return reportSort === "oldest" ? ta - tb : tb - ta
+    })
+    return sorted
+  }, [reports, blockersOnly, reportQuery, reportSort])
 
   return (
     <div className="flex flex-col gap-6">
@@ -228,21 +264,64 @@ export default function ReportsPage() {
       </div>
 
       <Card className="glass border-none">
-        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-          <select
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 md:w-72"
-          >
-            <option value="">All projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-          <div className="text-sm text-slate-400">
-            {loading ? "Syncing..." : `${reports.length} updates visible · ${totals.attachments} attachments`}
+        <CardContent className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                className="h-9 rounded-[10px] border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 md:w-56"
+              >
+                <option value="">All projects</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => setBlockersOnly((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors cursor-pointer ${
+                  blockersOnly
+                    ? "border-transparent bg-red-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Blockers only
+                <span className={`rounded-full px-1.5 text-[11px] font-bold ${blockersOnly ? "bg-white/25" : "bg-slate-100 text-slate-500"}`}>
+                  {totals.blockers}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 lg:w-56">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={reportQuery}
+                  onChange={(e) => setReportQuery(e.target.value)}
+                  placeholder="Search person or project…"
+                  className="h-9 w-full rounded-[10px] border border-slate-200 bg-white pl-9 pr-3 text-[13px] text-slate-800 outline-none focus:border-primary/40"
+                />
+              </div>
+              <div className="relative">
+                <ArrowUpDown className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <select
+                  value={reportSort}
+                  onChange={(e) => setReportSort(e.target.value as typeof reportSort)}
+                  className="h-9 rounded-[10px] border border-slate-200 bg-white pl-8 pr-3 text-[13px] font-medium text-slate-700 outline-none focus:border-primary/40"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="minutes">Most time</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="text-[13px] text-slate-400">
+            {loading ? "Syncing..." : `${visibleReports.length} of ${reports.length} updates · ${totals.attachments} attachments`}
           </div>
         </CardContent>
       </Card>
@@ -259,9 +338,13 @@ export default function ReportsPage() {
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
           No daily updates found.
         </div>
+      ) : visibleReports.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
+          No updates match your filters.
+        </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
-          {reports.map((report) => {
+          {visibleReports.map((report) => {
             // Only the original submitter can edit or delete their own report.
             // CEO and admin are review-only; managers and employees can still work their own reports.
             const canEdit = report.submitter_id === user?.id && role !== "ceo" && role !== "super_admin"
@@ -371,11 +454,28 @@ function ReportCard({
       <Card className="glass h-full border-none">
         <CardHeader className="border-b border-slate-100 pb-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base text-slate-900">{formatDate(report.date)}</CardTitle>
-              <CardDescription className="mt-1 text-slate-500">
-                {report.submitter?.full_name ?? report.submitter?.email ?? "Unknown"} · {report.project?.name ?? "General"}
-              </CardDescription>
+            <div className="flex items-center gap-3">
+              <div
+                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[12px] text-[15px] font-bold text-white"
+                style={{ background: avatarColor(report.submitter_id ?? report.id) }}
+              >
+                {reportInitials(report.submitter?.full_name ?? report.submitter?.email)}
+              </div>
+              <div>
+                <CardTitle className="text-[18px] font-semibold text-slate-900">
+                  {report.submitter?.full_name ?? report.submitter?.email ?? "Unknown"}
+                </CardTitle>
+                <CardDescription className="mt-0.5 flex flex-wrap items-center gap-x-2 text-slate-500">
+                  <span>{formatDate(report.date)}</span>
+                  <span className="text-slate-300">·</span>
+                  <span>{report.project?.name ?? "General"}</span>
+                  {report.blockers?.trim() && (
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+                      Blocked
+                    </span>
+                  )}
+                </CardDescription>
+              </div>
             </div>
             {canEdit && (
               <div className="flex gap-1">
