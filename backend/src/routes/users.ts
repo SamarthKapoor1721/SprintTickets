@@ -167,7 +167,7 @@ const userUpdateSchema = z.object({
 usersRouter.post(
   "",
   requireAuth,
-  requireExactRoles(UserRole.super_admin),
+  requireRoles(UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const body = parseBody(userCreateSchema, req.body);
@@ -214,7 +214,7 @@ usersRouter.post(
 usersRouter.patch(
   "/:id",
   requireAuth,
-  requireExactRoles(UserRole.super_admin),
+  requireRoles(UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const targetId = parseIntStrict(req.params.id, "id");
@@ -294,7 +294,7 @@ usersRouter.patch(
 usersRouter.delete(
   "/:id",
   requireAuth,
-  requireExactRoles(UserRole.super_admin),
+  requireRoles(UserRole.super_admin, UserRole.ceo),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const targetId = parseIntStrict(req.params.id, "id");

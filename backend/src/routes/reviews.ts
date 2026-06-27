@@ -56,12 +56,18 @@ const reviewCreateSchema = z.object({
   documentation_link: z.string().trim().optional().nullable(),
   tech_details: z.unknown().optional().nullable(),
   project_id: z.number().int().nullable().optional(),
-  reviewer_id: z.number().int().nullable().optional(),
+  reviewer_ids: z.preprocess(
+    (val) => {
+      if (Array.isArray(val)) return val.map(Number).filter(n => !isNaN(n));
+      if (typeof val === 'string' && val.trim() !== '') return [Number(val)].filter(n => !isNaN(n));
+      return undefined;
+    },
+    z.array(z.number().int()).optional()
+  ),
 });
 
 const reviewUpdateSchema = reviewCreateSchema.partial().extend({
   status: z.enum(["pending", "approved", "rejected", "needs_changes"]).optional(),
-  reviewer_id: z.number().int().nullable().optional(),
 });
 
 const commentCreateSchema = z.object({
@@ -73,7 +79,7 @@ async function getReviewOrThrow(reviewId: number) {
     where: { id: reviewId },
     include: {
       submitter: true,
-      reviewer: true,
+      reviewers: true,
     },
   });
 
@@ -136,7 +142,7 @@ reviewsRouter.get(
       orderBy: { createdAt: "desc" },
       include: {
         submitter: true,
-        reviewer: true,
+        reviewers: true,
       },
     });
 
@@ -175,7 +181,9 @@ reviewsRouter.post(
             ? Prisma.DbNull
             : (body.tech_details as Prisma.InputJsonValue),
       projectId: body.project_id ?? null,
-      reviewerId: body.reviewer_id ?? null,
+      reviewers: body.reviewer_ids?.length ? {
+        connect: body.reviewer_ids.map(id => ({ id }))
+      } : undefined,
       submitterId: req.authUser.id,
       attachments: files.length > 0 ? {
         create: files.map((file) => ({
@@ -191,7 +199,7 @@ reviewsRouter.post(
       data,
       include: {
         submitter: true,
-        reviewer: true,
+        reviewers: true,
       },
     });
 
@@ -226,28 +234,38 @@ reviewsRouter.patch(
       throw unauthorized();
     }
 
-    const review = await prisma.reviewRequest.findUnique({ where: { id: reviewId } });
+    const review = await prisma.reviewRequest.findUnique({ 
+      where: { id: reviewId },
+      include: { reviewers: true }
+    });
     if (!review) {
       throw notFound("Review not found");
     }
 
-    const isDecision = body.status !== undefined || body.reviewer_id !== undefined;
+    const isDecision = body.status !== undefined || body.reviewer_ids !== undefined;
     const isPrivileged = hasMinimumRole(req.authUser.role, UserRole.manager) || isSuperAdmin(req.authUser.role);
 
     if (isDecision && !isPrivileged) {
-      throw forbidden("Only reviewers can change status");
+      const isReviewer = review.reviewers.some(r => r.id === req.authUser.id);
+      if (!isReviewer) {
+        throw forbidden("Only reviewers can change status");
+      }
     }
     if (!isDecision && review.submitterId !== req.authUser.id && !isPrivileged) {
       throw forbidden("Not your review");
     }
 
-    const data: Prisma.ReviewRequestUncheckedUpdateInput = {
+    const data: Prisma.ReviewRequestUpdateInput = {
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.summary !== undefined ? { summary: body.summary ?? null } : {}),
       ...(body.objective !== undefined ? { objective: body.objective ?? null } : {}),
       ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.priority !== undefined ? { priority: body.priority } : {}),
-      ...(body.reviewer_id !== undefined ? { reviewerId: body.reviewer_id ?? null } : {}),
+      ...(body.reviewer_ids !== undefined ? {
+        reviewers: {
+          set: body.reviewer_ids.map(id => ({ id }))
+        }
+      } : {}),
       ...(body.website_url !== undefined ? { websiteUrl: body.website_url ?? null } : {}),
       ...(body.github_repo !== undefined ? { githubRepo: body.github_repo ?? null } : {}),
       ...(body.figma_link !== undefined ? { figmaLink: body.figma_link ?? null } : {}),
@@ -269,7 +287,7 @@ reviewsRouter.patch(
       data,
       include: {
         submitter: true,
-        reviewer: true,
+        reviewers: true,
       },
     });
 

@@ -61,7 +61,7 @@ export default function NewReviewPage() {
     github_repo: "",
     documentation_link: "",
     priority: "medium",
-    reviewer_id: "",
+    reviewer_ids: [] as string[],
   })
 
   const set = (key: keyof typeof form, value: string) =>
@@ -87,7 +87,7 @@ export default function NewReviewPage() {
       if (form.github_repo) formData.append("github_repo", form.github_repo)
       if (form.documentation_link) formData.append("documentation_link", form.documentation_link)
       if (form.project_id) formData.append("project_id", form.project_id)
-      if (form.reviewer_id) formData.append("reviewer_id", form.reviewer_id)
+      form.reviewer_ids.forEach(id => formData.append("reviewer_ids", id))
       
       attachedFiles.forEach(a => {
         formData.append("attachments", a.file)
@@ -163,24 +163,50 @@ export default function NewReviewPage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="reviewer" className="text-slate-700">Send To (Reviewer)</Label>
-                <select id="reviewer" value={form.reviewer_id} onChange={(e) => set("reviewer_id", e.target.value)} className={selectClass}>
-                  <option value="">Any Manager or CEO</option>
-                  {ceos.length > 0 && (
-                    <optgroup label="CEOs">
-                      {ceos.map((u) => (
-                        <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
-                      ))}
-                    </optgroup>
+                <Label className="text-slate-700">Send To (Reviewers)</Label>
+                <div className="flex flex-col gap-3 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  {ceos.map(u => (
+                    <label key={u.id} className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        checked={form.reviewer_ids.includes(String(u.id))}
+                        onChange={(e) => {
+                          const id = String(u.id);
+                          setForm(f => ({
+                            ...f, 
+                            reviewer_ids: e.target.checked 
+                              ? [...f.reviewer_ids, id] 
+                              : f.reviewer_ids.filter(x => x !== id)
+                          }))
+                        }}
+                      />
+                      <span className="text-[13px] font-medium text-slate-700">{u.full_name ?? u.email} <span className="ml-1 text-[11px] text-slate-400 font-normal border rounded px-1 py-0.5">CEO</span></span>
+                    </label>
+                  ))}
+                  {managers.map(u => (
+                    <label key={u.id} className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        checked={form.reviewer_ids.includes(String(u.id))}
+                        onChange={(e) => {
+                          const id = String(u.id);
+                          setForm(f => ({
+                            ...f, 
+                            reviewer_ids: e.target.checked 
+                              ? [...f.reviewer_ids, id] 
+                              : f.reviewer_ids.filter(x => x !== id)
+                          }))
+                        }}
+                      />
+                      <span className="text-[13px] font-medium text-slate-700">{u.full_name ?? u.email} <span className="ml-1 text-[11px] text-slate-400 font-normal border rounded px-1 py-0.5">Manager</span></span>
+                    </label>
+                  ))}
+                  {ceos.length === 0 && managers.length === 0 && (
+                    <div className="text-sm text-slate-500">No managers or CEOs available</div>
                   )}
-                  {managers.length > 0 && (
-                    <optgroup label="Managers">
-                      {managers.map((u) => (
-                        <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                </div>
               </div>
             </div>
 

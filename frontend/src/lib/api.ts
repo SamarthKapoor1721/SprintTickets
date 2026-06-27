@@ -164,9 +164,8 @@ export interface Review {
   tech_details: any
   project_id: number | null
   submitter_id: number | null
-  reviewer_id: number | null
   submitter: User | null
-  reviewer: User | null
+  reviewers: User[]
   attachments?: ReviewAttachment[]
   created_at: string | null
   updated_at: string | null
@@ -192,7 +191,7 @@ export interface ReviewCreate {
   figma_link?: string
   documentation_link?: string
   project_id?: number | null
-  reviewer_id?: number | null
+  reviewer_ids?: number[]
 }
 
 // ---- Tasks ----

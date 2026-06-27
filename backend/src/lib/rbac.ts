@@ -76,6 +76,8 @@ export function reportAccessWhere(currentUser: { id: number; role: UserRole }) {
   return { submitterId: currentUser.id };
 }
 
-export function canManageUser(currentUserRole: UserRole, _targetUserRole: UserRole): boolean {
-  return currentUserRole === UserRole.super_admin;
+export function canManageUser(currentUserRole: UserRole, targetUserRole: UserRole): boolean {
+  if (currentUserRole === UserRole.super_admin) return true;
+  if (currentUserRole === UserRole.ceo && targetUserRole !== UserRole.super_admin) return true;
+  return false;
 }

@@ -42,11 +42,11 @@ export function serializeUserDetail(
     })[];
     submittedReviews?: (ReviewRequest & {
       submitter?: User | null;
-      reviewer?: User | null;
+      reviewers?: User[];
     })[];
     reviewedReviews?: (ReviewRequest & {
       submitter?: User | null;
-      reviewer?: User | null;
+      reviewers?: User[];
     })[];
     assignedTasks?: (Task & {
       assignee?: User | null;
@@ -117,7 +117,7 @@ export function serializeProject(
 export function serializeReview(
   review: ReviewRequest & {
     submitter?: User | null;
-    reviewer?: User | null;
+    reviewers?: User[];
     attachments?: ReviewAttachment[];
   },
 ) {
@@ -136,9 +136,8 @@ export function serializeReview(
     tech_details: review.techDetails,
     project_id: review.projectId,
     submitter_id: review.submitterId,
-    reviewer_id: review.reviewerId,
     submitter: review.submitter ? serializeUser(review.submitter) : null,
-    reviewer: review.reviewer ? serializeUser(review.reviewer) : null,
+    reviewers: review.reviewers ? review.reviewers.map(serializeUser) : [],
     attachments: (review.attachments ?? []).map(a => ({
       id: a.id,
       file_name: a.fileName,
