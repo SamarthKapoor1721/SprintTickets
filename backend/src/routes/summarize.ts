@@ -27,7 +27,7 @@ summarizeRouter.post(
         where: { createdAt: { gte: sevenDaysAgo } },
         include: {
           submitter: { select: { fullName: true, email: true } },
-          reviewer: { select: { fullName: true } },
+          reviewers: { select: { fullName: true, email: true } },
         },
         orderBy: { createdAt: "desc" },
         take: 30,
@@ -58,7 +58,7 @@ summarizeRouter.post(
     const reviewsText = reviews.length === 0
       ? "No reviews in the last 7 days."
       : reviews.map((r: ReviewRow) =>
-          `- [${r.status.toUpperCase()}] "${r.title}" (${r.priority} priority) — submitted by ${r.submitter?.fullName ?? r.submitter?.email ?? "unknown"}${r.reviewer ? `, reviewer: ${r.reviewer.fullName}` : ""}. Summary: ${r.summary?.slice(0, 200) ?? "none"}`
+          `- [${r.status.toUpperCase()}] "${r.title}" (${r.priority} priority) — submitted by ${r.submitter?.fullName ?? r.submitter?.email ?? "unknown"}${r.reviewers && r.reviewers.length > 0 ? `, reviewers: ${r.reviewers.map(rev => rev.fullName || rev.email).join(", ")}` : ""}. Summary: ${r.summary?.slice(0, 200) ?? "none"}`
         ).join("\n");
 
     type ReportRow = typeof reports[number];

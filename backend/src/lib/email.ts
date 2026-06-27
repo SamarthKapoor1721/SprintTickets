@@ -48,6 +48,36 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+function emailLayout(title: string, innerHtml: string, ctaUrl?: string, ctaText?: string) {
+  const ctaButton = ctaUrl && ctaText ? `
+    <div style="text-align: center; margin-top: 32px; margin-bottom: 32px;">
+      <a href="${ctaUrl}" style="display: inline-block; padding: 12px 28px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);">
+        ${ctaText}
+      </a>
+    </div>
+  ` : '';
+
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 20px; color: #334155; line-height: 1.6;">
+      <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);">
+        <div style="background-color: #2563eb; padding: 32px 24px; text-align: center; background-image: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);">
+          <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Sprint Tickets</h1>
+        </div>
+        <div style="padding: 40px 32px; font-size: 16px;">
+          <h2 style="margin-top: 0; margin-bottom: 24px; color: #0f172a; font-size: 20px; font-weight: 600;">${title}</h2>
+          <div style="color: #475569;">
+            ${innerHtml}
+          </div>
+          ${ctaButton}
+        </div>
+        <div style="background-color: #f1f5f9; border-top: 1px solid #e2e8f0; padding: 24px; text-align: center; font-size: 13px; color: #64748b;">
+          <p style="margin: 0;">This is an automated notification from Sprint Tickets.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export async function sendReportNotificationEmail(
   recipientEmails: string[],
   submitterName: string,
@@ -60,7 +90,8 @@ export async function sendReportNotificationEmail(
   const contextStr = projectName ? ` for project "${projectName}"` : "";
   const subject = `New Daily Report Submitted: ${submitterName}`;
   const text = `${submitterName} has submitted a new daily progress report${contextStr} for ${dateStr}. Please log in to the dashboard to review it.`;
-  const html = `<p><strong>${submitterName}</strong> has submitted a new daily progress report${contextStr} for <strong>${dateStr}</strong>.</p><p><a href="${env.APP_URL}">Log in to the dashboard</a> to review it.</p>`;
+  const innerHtml = `<p><strong>${escapeHtml(submitterName)}</strong> has submitted a new daily progress report${escapeHtml(contextStr)} for <strong>${dateStr}</strong>.</p>`;
+  const html = emailLayout("New Daily Report", innerHtml, env.APP_URL, "Review Report");
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }
@@ -68,7 +99,11 @@ export async function sendReportNotificationEmail(
 export async function sendDirectMessageEmail(recipientEmail: string, senderName: string, messageContent: string) {
   const subject = `New direct message from ${senderName}`;
   const text = `You have a new message from ${senderName}:\n\n"${messageContent}"\n\nLog in to the dashboard to reply.`;
-  const html = `<p>You have a new message from <strong>${senderName}</strong>:</p><blockquote>${messageContent}</blockquote><p><a href="${env.APP_URL}">Log in to the dashboard</a> to reply.</p>`;
+  const innerHtml = `<p>You have a new message from <strong>${escapeHtml(senderName)}</strong>:</p>
+    <div style="background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; font-style: italic;">
+      ${escapeHtml(messageContent)}
+    </div>`;
+  const html = emailLayout("New Message", innerHtml, env.APP_URL, "Reply in Dashboard");
 
   await dispatchEmail(recipientEmail, subject, text, html);
 }
@@ -83,7 +118,11 @@ export async function sendTaskCommentEmail(
 
   const subject = `New comment on task: ${taskTitle}`;
   const text = `${commenterName} commented on task "${taskTitle}":\n\n"${commentContent}"\n\nLog in to the dashboard to view and reply.`;
-  const html = `<p><strong>${commenterName}</strong> commented on task "<strong>${taskTitle}</strong>":</p><blockquote>${commentContent}</blockquote><p><a href="${env.APP_URL}">Log in to the dashboard</a> to view and reply.</p>`;
+  const innerHtml = `<p><strong>${escapeHtml(commenterName)}</strong> commented on task "<strong>${escapeHtml(taskTitle)}</strong>":</p>
+    <div style="background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; font-style: italic;">
+      ${escapeHtml(commentContent)}
+    </div>`;
+  const html = emailLayout("Task Comment", innerHtml, env.APP_URL, "View Task");
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }
@@ -98,7 +137,26 @@ export async function sendReviewCommentEmail(
 
   const subject = `New comment on review request: ${reviewTitle}`;
   const text = `${commenterName} commented on review request "${reviewTitle}":\n\n"${commentContent}"\n\nLog in to the dashboard to view and reply.`;
-  const html = `<p><strong>${commenterName}</strong> commented on review request "<strong>${reviewTitle}</strong>":</p><blockquote>${commentContent}</blockquote><p><a href="${env.APP_URL}">Log in to the dashboard</a> to view and reply.</p>`;
+  const innerHtml = `<p><strong>${escapeHtml(commenterName)}</strong> commented on review request "<strong>${escapeHtml(reviewTitle)}</strong>":</p>
+    <div style="background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; font-style: italic;">
+      ${escapeHtml(commentContent)}
+    </div>`;
+  const html = emailLayout("Review Update", innerHtml, `${env.APP_URL}/dashboard/reviews`, "View Review");
+
+  await dispatchEmail(recipientEmails, subject, text, html);
+}
+
+export async function sendReviewCreatedEmail(
+  recipientEmails: string[],
+  reviewTitle: string,
+  submitterName: string,
+) {
+  if (recipientEmails.length === 0) return;
+
+  const subject = `New review request: ${reviewTitle}`;
+  const text = `${submitterName} has requested your review on "${reviewTitle}".\n\nLog in to the dashboard to view and approve it.`;
+  const innerHtml = `<p><strong>${escapeHtml(submitterName)}</strong> has requested your review on "<strong>${escapeHtml(reviewTitle)}</strong>".</p>`;
+  const html = emailLayout("Review Requested", innerHtml, `${env.APP_URL}/dashboard/reviews/pending`, "Review Now");
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }
@@ -116,19 +174,12 @@ export async function sendPasswordResetEmail(recipientEmail: string, resetUrl: s
     "",
     "If you did not request this, you can ignore this email.",
   ].join("\n");
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
-      <p>${greeting},</p>
-      <p>We received a request to reset your Sprint Tickets password.</p>
-      <p>
-        <a href="${resetUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;">
-          Reset password
-        </a>
-      </p>
-      <p style="word-break: break-all;">If the button does not work, use this link:<br />${resetUrl}</p>
-      <p>If you did not request this, you can ignore this email.</p>
-    </div>
+  const innerHtml = `
+    <p>We received a request to reset your Sprint Tickets password.</p>
+    <p style="font-size: 14px; color: #64748b; margin-top: 24px; word-break: break-all;">If the button does not work, use this link:<br />${resetUrl}</p>
+    <p style="font-size: 14px; color: #64748b;">If you did not request this, you can ignore this email.</p>
   `;
+  const html = emailLayout(greeting + ",", innerHtml, resetUrl, "Reset Password");
 
   await dispatchEmail(recipientEmail, subject, text, html);
 }

@@ -10,7 +10,7 @@ import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error
 import { requireAuth } from "../middleware/auth";
 import { serializeReviewComment, serializeReview } from "../lib/serializers";
 import { hasMinimumRole, isSuperAdmin } from "../lib/rbac";
-import { sendReviewCommentEmail } from "../lib/email";
+import { sendReviewCommentEmail, sendReviewCreatedEmail } from "../lib/email";
 import multer from "multer";
 
 export const reviewsRouter = Router();
@@ -55,7 +55,7 @@ const reviewCreateSchema = z.object({
   figma_link: z.string().trim().optional().nullable(),
   documentation_link: z.string().trim().optional().nullable(),
   tech_details: z.unknown().optional().nullable(),
-  project_id: z.number().int().nullable().optional(),
+  project_id: z.coerce.number().int().nullable().optional(),
   reviewer_ids: z.preprocess(
     (val) => {
       if (Array.isArray(val)) return val.map(Number).filter(n => !isNaN(n));
@@ -203,6 +203,19 @@ reviewsRouter.post(
       },
     });
 
+    const recipientEmails = new Set<string>();
+    for (const r of review.reviewers) {
+      if (r.email && r.id !== req.authUser.id) {
+        recipientEmails.add(r.email);
+      }
+    }
+    
+    sendReviewCreatedEmail(
+      Array.from(recipientEmails),
+      review.title,
+      req.authUser.fullName || req.authUser.email
+    ).catch(console.error);
+
     await cacheInvalidate("reviews:list:*");
     res.status(201).json(serializeReview(review));
   }),
@@ -348,8 +361,10 @@ reviewsRouter.post(
     if (review.submitter?.email && review.submitter.id !== req.authUser.id) {
       recipientEmails.add(review.submitter.email);
     }
-    if (review.reviewer?.email && review.reviewer.id !== req.authUser.id) {
-      recipientEmails.add(review.reviewer.email);
+    for (const r of review.reviewers) {
+      if (r.email && r.id !== req.authUser.id) {
+        recipientEmails.add(r.email);
+      }
     }
     
     sendReviewCommentEmail(
