@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 
 import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/async-handler";
@@ -80,18 +80,20 @@ messagesRouter.get(
 
     res.json(
       contacts.map((row) =>
-        serializeContact({
-          user: {
-            id: row.id,
-            email: row.email,
-            googleId: null,
-            hashedPassword: null,
-            fullName: row.full_name,
-            role: row.role as never,
-            department: row.department,
-            isActive: row.is_active,
-            onboardingToken: null,
-          },
+          serializeContact({
+            user: {
+              id: row.id,
+              email: row.email,
+              googleId: null,
+              hashedPassword: null,
+              fullName: row.full_name,
+              role: row.role as UserRole,
+              department: row.department,
+              isActive: row.is_active,
+              onboardingToken: null,
+              resetPasswordToken: null,
+              resetPasswordTokenExpiresAt: null,
+            },
           lastMessage:
             row.last_message_id == null
               ? null

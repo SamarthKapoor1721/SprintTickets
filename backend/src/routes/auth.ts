@@ -10,6 +10,9 @@ import { parseBody } from "../lib/validation";
 import { badRequest, unauthorized } from "../lib/http-error";
 import { requireAuth } from "../middleware/auth";
 import { serializeUser } from "../lib/serializers";
+import { sendPasswordResetEmail } from "../lib/email";
+import { env } from "../env";
+import { randomUUID } from "crypto";
 
 export const authRouter = Router();
 
@@ -52,6 +55,21 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
+});
+
+function buildPasswordResetUrl(token: string) {
+  const url = new URL("/auth/reset-password", env.APP_URL);
+  url.searchParams.set("token", token);
+  return url.toString();
+}
+
 authRouter.post(
   "/login",
   asyncHandler(async (req, res) => {
@@ -66,6 +84,64 @@ authRouter.post(
       user: serializeUser(user),
       access_token: createAccessToken(user.id),
       token_type: "bearer",
+    });
+  }),
+);
+
+authRouter.post(
+  "/forgot-password",
+  asyncHandler(async (req, res) => {
+    const body = parseBody(forgotPasswordSchema, req.body);
+    const user = await prisma.user.findUnique({ where: { email: body.email } });
+
+    if (user && user.hashedPassword) {
+      const token = randomUUID();
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetPasswordToken: token,
+          resetPasswordTokenExpiresAt: expiresAt,
+        },
+      });
+
+      await sendPasswordResetEmail(user.email, buildPasswordResetUrl(token), user.fullName);
+    }
+
+    res.json({
+      message:
+        "If an account exists for that email address, we sent a password reset link.",
+    });
+  }),
+);
+
+authRouter.post(
+  "/reset-password",
+  asyncHandler(async (req, res) => {
+    const body = parseBody(resetPasswordSchema, req.body);
+    const user = await prisma.user.findFirst({
+      where: {
+        resetPasswordToken: body.token,
+        resetPasswordTokenExpiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      throw badRequest("Invalid or expired password reset token");
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        hashedPassword: hashPassword(body.password),
+        resetPasswordToken: null,
+        resetPasswordTokenExpiresAt: null,
+      },
+    });
+
+    res.json({
+      user: serializeUser(updated),
+      message: "Password updated successfully",
     });
   }),
 );

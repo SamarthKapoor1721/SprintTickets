@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ExternalLink, FileUp, Link as LinkIcon, Send, Upload, X } from "lucide-react"
-import { createReview, listProjects, type Project } from "@/lib/api"
+import { createReview, listProjects, listUsers, type Project, type User } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 interface AttachmentItem {
   file: File
@@ -23,12 +24,26 @@ const inputClass =
 
 export default function NewReviewPage() {
   const router = useRouter()
+  const { user, loading } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attachedFiles, setAttachedFiles] = useState<AttachmentItem[]>([])
+  const [undoTimer, setUndoTimer] = useState<number | null>(null)
+  const [countdown, setCountdown] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const attachInputRef = useRef<HTMLInputElement>(null)
+
+  // CEO / admin are reviewers — redirect them away from the submission form
+  useEffect(() => {
+    if (!loading && user) {
+      const role = user.role
+      if (role === "ceo" || role === "super_admin") {
+        router.replace("/dashboard/reviews/pending")
+      }
+    }
+  }, [loading, user, router])
 
   // Revoke object URLs when component unmounts
   useEffect(() => {
@@ -46,46 +61,71 @@ export default function NewReviewPage() {
     github_repo: "",
     documentation_link: "",
     priority: "medium",
+    reviewer_id: "",
   })
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((f) => ({ ...f, [key]: value }))
 
   useEffect(() => {
-    listProjects()
-      .then(setProjects)
-      .catch(() => setProjects([]))
+    listProjects().then(setProjects).catch(() => setProjects([]))
+    listUsers().then(setUsers).catch(() => setUsers([]))
   }, [])
 
-  const submit = async () => {
-    if (!form.title.trim()) {
-      setError("A review title is required.")
-      return
-    }
+  const executeSubmit = async () => {
+    setUndoTimer(null)
     setSubmitting(true)
     setError(null)
     try {
-      // Append attached file names to summary so reviewers know what was submitted
-      let summary = form.summary
-      if (attachedFiles.length > 0) {
-        const fileNote = "\n\n📎 Attachments: " + attachedFiles.map((a) => a.file.name).join(", ")
-        summary = (summary || "") + fileNote
-      }
-      await createReview({
-        title: form.title,
-        summary: summary || undefined,
-        review_type: form.review_type || undefined,
-        priority: form.priority as "low" | "medium" | "high" | "critical",
-        website_url: form.website_url || undefined,
-        figma_link: form.figma_link || undefined,
-        github_repo: form.github_repo || undefined,
-        documentation_link: form.documentation_link || undefined,
-        project_id: form.project_id ? Number(form.project_id) : null,
+      const formData = new FormData()
+      formData.append("title", form.title)
+      if (form.summary) formData.append("summary", form.summary)
+      if (form.review_type) formData.append("review_type", form.review_type)
+      if (form.priority) formData.append("priority", form.priority)
+      if (form.website_url) formData.append("website_url", form.website_url)
+      if (form.figma_link) formData.append("figma_link", form.figma_link)
+      if (form.github_repo) formData.append("github_repo", form.github_repo)
+      if (form.documentation_link) formData.append("documentation_link", form.documentation_link)
+      if (form.project_id) formData.append("project_id", form.project_id)
+      if (form.reviewer_id) formData.append("reviewer_id", form.reviewer_id)
+      
+      attachedFiles.forEach(a => {
+        formData.append("attachments", a.file)
       })
+
+      await createReview(formData)
       router.push("/dashboard/reviews/pending")
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to submit review")
       setSubmitting(false)
+    }
+  }
+
+  const submit = () => {
+    if (!form.title.trim()) {
+      setError("A review title is required.")
+      return
+    }
+    // Start undo timer
+    let count = 5
+    setCountdown(count)
+    const interval = setInterval(() => {
+      count--
+      setCountdown(count)
+    }, 1000)
+
+    const timer = window.setTimeout(() => {
+      clearInterval(interval)
+      executeSubmit()
+    }, 5000)
+    
+    setUndoTimer(timer)
+  }
+
+  const cancelSubmit = () => {
+    if (undoTimer) {
+      clearTimeout(undoTimer)
+      setUndoTimer(null)
     }
   }
 
@@ -101,6 +141,10 @@ export default function NewReviewPage() {
         <p className="text-slate-500">Submit a new project milestone for executive approval.</p>
       </div>
 
+      {(() => {
+        const ceos = users.filter((u) => u.role === "ceo")
+        const managers = users.filter((u) => u.role === "manager")
+        return (
       <div className="grid gap-6">
         <Card className="glass border-none">
           <CardHeader className="pb-4">
@@ -119,6 +163,29 @@ export default function NewReviewPage() {
                 </select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="reviewer" className="text-slate-700">Send To (Reviewer)</Label>
+                <select id="reviewer" value={form.reviewer_id} onChange={(e) => set("reviewer_id", e.target.value)} className={selectClass}>
+                  <option value="">Any Manager or CEO</option>
+                  {ceos.length > 0 && (
+                    <optgroup label="CEOs">
+                      {ceos.map((u) => (
+                        <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {managers.length > 0 && (
+                    <optgroup label="Managers">
+                      {managers.map((u) => (
+                        <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="type" className="text-slate-700">Review Type</Label>
                 <select id="type" value={form.review_type} onChange={(e) => set("review_type", e.target.value)} className={selectClass}>
                   <option value="">Select review type</option>
@@ -127,9 +194,6 @@ export default function NewReviewPage() {
                   <option value="design">Design Approval</option>
                 </select>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="title" className="text-slate-700">Review Title</Label>
                 <Input id="title" value={form.title} onChange={(e) => set("title", e.target.value)} className={inputClass} placeholder="e.g. Final Design Approval for Apollo" />
@@ -302,23 +366,40 @@ export default function NewReviewPage() {
         )}
 
         <div className="flex items-center justify-end gap-3 pb-12">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/dashboard")}
-            className="h-11 px-6 text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={submit}
-            disabled={submitting}
-            className="flex h-11 items-center gap-2 rounded-xl bg-primary px-8 text-white shadow-sm shadow-primary/20 hover:bg-primary/90 cursor-pointer"
-          >
-            <Send className="h-4 w-4" />
-            {submitting ? "Submitting…" : "Submit for CEO Review"}
-          </Button>
+          {undoTimer ? (
+            <div className="flex items-center gap-4 rounded-xl bg-slate-900 px-6 py-2.5 text-white shadow-lg animate-in slide-in-from-bottom-4">
+              <span className="text-sm font-medium">Submitting in {countdown}s...</span>
+              <Button
+                variant="ghost"
+                onClick={cancelSubmit}
+                className="h-8 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+              >
+                Undo
+              </Button>
+            </div>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/dashboard")}
+                className="h-11 px-6 text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={submit}
+                disabled={submitting}
+                className="flex h-11 items-center gap-2 rounded-xl bg-primary px-8 text-white shadow-sm shadow-primary/20 hover:bg-primary/90 cursor-pointer"
+              >
+                <Send className="h-4 w-4" />
+                {submitting ? "Submitting…" : "Submit Review"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
+        )
+      })()}
     </motion.div>
   )
 }

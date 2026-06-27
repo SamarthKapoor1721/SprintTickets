@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { Prisma, UserRole } from "@prisma/client";
 import { cacheGet, cacheSet, cacheInvalidate } from "../lib/cache";
 import { z } from "zod";
@@ -11,8 +11,38 @@ import { requireAuth } from "../middleware/auth";
 import { serializeReviewComment, serializeReview } from "../lib/serializers";
 import { hasMinimumRole, isSuperAdmin } from "../lib/rbac";
 import { sendReviewCommentEmail } from "../lib/email";
+import multer from "multer";
 
 export const reviewsRouter = Router();
+
+const reviewUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+});
+
+function parseMaybeMultipartPayload(raw: unknown) {
+  if (!raw || typeof raw !== "object") return raw;
+  const body = raw as Record<string, unknown>;
+  if (typeof body.payload !== "string") return raw;
+
+  try {
+    return JSON.parse(body.payload);
+  } catch {
+    throw badRequest("Invalid review payload");
+  }
+}
+
+function maybeParseMultipartReview(req: Request, res: Response, next: NextFunction) {
+  if (req.is("multipart/form-data")) {
+    reviewUpload.array("attachments", 6)(req, res, next);
+    return;
+  }
+  next();
+}
+
+function getReviewFiles(req: Request) {
+  return Array.isArray(req.files) ? req.files : [];
+}
 
 const reviewCreateSchema = z.object({
   title: z.string().trim().min(1),
@@ -26,6 +56,7 @@ const reviewCreateSchema = z.object({
   documentation_link: z.string().trim().optional().nullable(),
   tech_details: z.unknown().optional().nullable(),
   project_id: z.number().int().nullable().optional(),
+  reviewer_id: z.number().int().nullable().optional(),
 });
 
 const reviewUpdateSchema = reviewCreateSchema.partial().extend({
@@ -118,8 +149,10 @@ reviewsRouter.get(
 reviewsRouter.post(
   "",
   requireAuth,
+  maybeParseMultipartReview,
   asyncHandler(async (req, res) => {
-    const body = parseBody(reviewCreateSchema, req.body);
+    const body = parseBody(reviewCreateSchema, parseMaybeMultipartPayload(req.body));
+    const files = getReviewFiles(req);
     if (!req.authUser) {
       throw unauthorized();
     }
@@ -142,7 +175,16 @@ reviewsRouter.post(
             ? Prisma.DbNull
             : (body.tech_details as Prisma.InputJsonValue),
       projectId: body.project_id ?? null,
+      reviewerId: body.reviewer_id ?? null,
       submitterId: req.authUser.id,
+      attachments: files.length > 0 ? {
+        create: files.map((file) => ({
+          fileName: file.originalname,
+          mimeType: file.mimetype || "application/octet-stream",
+          sizeBytes: file.size,
+          data: Buffer.from(file.buffer) as unknown as Prisma.Bytes,
+        }))
+      } : undefined,
     };
 
     const review = await prisma.reviewRequest.create({
@@ -301,4 +343,60 @@ reviewsRouter.post(
 
     res.status(201).json(serializeReviewComment(comment));
   }),
+);
+
+reviewsRouter.get(
+  "/:reviewId/attachments/:attachmentId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (!req.authUser) throw unauthorized();
+    const reviewId = Number(req.params.reviewId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (!Number.isInteger(reviewId) || !Number.isInteger(attachmentId)) {
+      throw badRequest("Invalid IDs");
+    }
+
+    const review = await getReviewOrThrow(reviewId);
+
+    const attachment = await prisma.reviewAttachment.findFirst({
+      where: { id: attachmentId, reviewRequestId: reviewId },
+    });
+
+    if (!attachment) throw notFound("Attachment not found");
+
+    res.setHeader("Content-Type", attachment.mimeType);
+    res.setHeader("Content-Length", attachment.sizeBytes);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(attachment.fileName)}`);
+    res.send(Buffer.from(attachment.data));
+  })
+);
+
+reviewsRouter.delete(
+  "/:reviewId/attachments/:attachmentId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (!req.authUser) throw unauthorized();
+    const reviewId = Number(req.params.reviewId);
+    const attachmentId = Number(req.params.attachmentId);
+
+    if (!Number.isInteger(reviewId) || !Number.isInteger(attachmentId)) {
+      throw badRequest("Invalid IDs");
+    }
+
+    const review = await getReviewOrThrow(reviewId);
+    if (review.submitterId !== req.authUser.id && req.authUser.role !== UserRole.super_admin) {
+      throw forbidden("Not allowed to delete this attachment");
+    }
+
+    const attachment = await prisma.reviewAttachment.findFirst({
+      where: { id: attachmentId, reviewRequestId: reviewId },
+    });
+
+    if (!attachment) throw notFound("Attachment not found");
+
+    await prisma.reviewAttachment.delete({ where: { id: attachmentId } });
+    await cacheInvalidate("reviews:list:*");
+    res.status(204).send();
+  })
 );

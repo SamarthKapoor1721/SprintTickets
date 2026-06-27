@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { login } from "@/lib/api"
@@ -65,7 +66,9 @@ export default function LoginPage() {
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <label className="text-[13px] font-medium text-slate-600">Password</label>
-                <span className="cursor-pointer text-[12.5px] font-medium text-primary">Forgot?</span>
+                <Link href="/auth/forgot-password" className="text-[12.5px] font-medium text-primary hover:underline">
+                  Forgot?
+                </Link>
               </div>
               <input
                 type="password"

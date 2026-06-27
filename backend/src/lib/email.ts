@@ -39,6 +39,15 @@ async function dispatchEmail(to: string | string[], subject: string, text: strin
   }
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendReportNotificationEmail(
   recipientEmails: string[],
   submitterName: string,
@@ -92,4 +101,34 @@ export async function sendReviewCommentEmail(
   const html = `<p><strong>${commenterName}</strong> commented on review request "<strong>${reviewTitle}</strong>":</p><blockquote>${commentContent}</blockquote><p><a href="${env.APP_URL}">Log in to the dashboard</a> to view and reply.</p>`;
 
   await dispatchEmail(recipientEmails, subject, text, html);
+}
+
+export async function sendPasswordResetEmail(recipientEmail: string, resetUrl: string, fullName?: string | null) {
+  const name = fullName?.trim();
+  const greeting = name ? `Hello ${escapeHtml(name)}` : "Hello";
+  const subject = "Reset your Sprint Tickets password";
+  const text = [
+    `${greeting},`,
+    "",
+    "We received a request to reset your Sprint Tickets password.",
+    "Use the link below to choose a new password:",
+    resetUrl,
+    "",
+    "If you did not request this, you can ignore this email.",
+  ].join("\n");
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
+      <p>${greeting},</p>
+      <p>We received a request to reset your Sprint Tickets password.</p>
+      <p>
+        <a href="${resetUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;">
+          Reset password
+        </a>
+      </p>
+      <p style="word-break: break-all;">If the button does not work, use this link:<br />${resetUrl}</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    </div>
+  `;
+
+  await dispatchEmail(recipientEmail, subject, text, html);
 }

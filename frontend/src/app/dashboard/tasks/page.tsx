@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react"
 import { TEAMS } from "@/lib/teams"
 import { motion } from "framer-motion"
 import { useAuth } from "@/lib/auth-context"
@@ -40,6 +40,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  formatDateOnly,
+  isPastDateOnly,
+  isSuspiciousDateOnly,
+  normalizeDateOnly,
+} from "@/lib/date"
+import {
   AlertCircle,
   Bug,
   CalendarDays,
@@ -78,14 +84,12 @@ const issueStyles: Record<TaskIssueType, string> = {
   epic: "bg-indigo-100 text-indigo-700",
 }
 
-function toDateInput(value: string | null | undefined) {
-  if (!value) return ""
-  return new Date(value).toISOString().slice(0, 10)
-}
-
-function formatDate(value: string | null | undefined) {
+function formatTaskDate(value: string | null | undefined) {
   if (!value) return "No due date"
-  return new Date(value).toLocaleDateString([], { month: "short", day: "numeric" })
+  const formatted = isSuspiciousDateOnly(value)
+    ? formatDateOnly(value, { month: "short", day: "numeric", year: "numeric" })
+    : formatDateOnly(value)
+  return formatted || "No due date"
 }
 
 function teamUsers(project?: Project | null) {
@@ -108,7 +112,7 @@ function teamUsers(project?: Project | null) {
 export default function TasksPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
-  const canManage = role === "manager" || role === "super_admin"
+  const canManage = role === "manager" || role === "super_admin" || role === "ceo"
 
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -169,7 +173,7 @@ export default function TasksPage() {
   const counts = {
     total: tasks.length,
     blocked: tasks.filter((task) => task.status === "blocked").length,
-    overdue: tasks.filter((task) => task.status !== "done" && task.due_date && new Date(task.due_date) < new Date()).length,
+    overdue: tasks.filter((task) => task.status !== "done" && isPastDateOnly(task.due_date)).length,
     done: tasks.filter((task) => task.status === "done").length,
   }
 
@@ -387,7 +391,8 @@ function TaskCard({
   onSaved: () => void
   onStatus: (task: Task, status: TaskStatus) => void
 }) {
-  const overdue = task.status !== "done" && task.due_date && new Date(task.due_date) < new Date()
+  const overdue = task.status !== "done" && isPastDateOnly(task.due_date)
+  const dueDate = formatTaskDate(task.due_date)
 
   // The whole row is the dialog trigger; interactive controls stop propagation.
   const row = (
@@ -420,8 +425,8 @@ function TaskCard({
         <MessageSquare className="h-3 w-3" strokeWidth={1.8} />
         {task.comments_count}
       </span>
-      <span className={`w-[72px] text-right text-[11.5px] ${overdue ? "font-semibold text-red-500" : "text-slate-400"}`}>
-        {formatDate(task.due_date)}
+        <span className={`w-[92px] text-right text-[11.5px] ${overdue ? "font-semibold text-red-500" : "text-slate-400"}`}>
+        {dueDate}
       </span>
 
       {/* Quick status change — does not open the dialog */}
@@ -473,7 +478,7 @@ function TaskDialog({
   const [projectId, setProjectId] = useState(task?.project_id ? String(task.project_id) : "")
   const [sprintId, setSprintId] = useState(task?.sprint_id ? String(task.sprint_id) : "")
   const [assigneeId, setAssigneeId] = useState(task?.assignee_id ? String(task.assignee_id) : "")
-  const [dueDate, setDueDate] = useState(toDateInput(task?.due_date))
+  const [dueDate, setDueDate] = useState(normalizeDateOnly(task?.due_date))
   const [estimate, setEstimate] = useState(task?.estimate_minutes != null ? String(task.estimate_minutes) : "")
   const [logged, setLogged] = useState(task?.logged_minutes != null ? String(task.logged_minutes) : "0")
   const [comments, setComments] = useState<TaskComment[]>([])
@@ -515,7 +520,7 @@ function TaskDialog({
       setProjectId(task?.project_id ? String(task.project_id) : "")
       setSprintId(task?.sprint_id ? String(task.sprint_id) : "")
       setAssigneeId(task?.assignee_id ? String(task.assignee_id) : "")
-      setDueDate(toDateInput(task?.due_date))
+      setDueDate(normalizeDateOnly(task?.due_date))
       setEstimate(task?.estimate_minutes != null ? String(task.estimate_minutes) : "")
       setLogged(task?.logged_minutes != null ? String(task.logged_minutes) : "0")
       setErr(null)
@@ -627,156 +632,248 @@ function TaskDialog({
           )
         }
       />
-      <DialogContent className="max-h-[92vh] overflow-y-auto border-slate-200 bg-white text-slate-900 sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Create issue" : "Issue details"}</DialogTitle>
-          <DialogDescription>
-            {canManage ? "Manage ownership, sprint, delivery dates, and discussion." : "Update your status and logged time."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-5 lg:grid-cols-[1.4fr_0.9fr]">
-          <div className="space-y-4">
-            {canManage ? (
-              <>
-                <div className="space-y-2">
-                  <Label>Title</Label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border-slate-200 bg-slate-50" />
+      <DialogContent className="max-h-[92vh] overflow-hidden border-slate-200 bg-slate-50 p-0 text-slate-900 sm:max-w-5xl">
+        <div className="flex max-h-[92vh] flex-col">
+          <DialogHeader className="border-b border-slate-200 bg-white px-6 py-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {task && (
+                    <>
+                      <Badge className={`border-none capitalize ${issueStyles[task.issue_type]}`}>{task.issue_type}</Badge>
+                      <Badge className={`border-none capitalize ${priorityStyles[task.priority]}`}>{task.priority}</Badge>
+                    </>
+                  )}
+                  <Badge className="border-none bg-slate-100 text-slate-700 capitalize">{status}</Badge>
+                  {task && (
+                    <Badge className="border-none bg-blue-50 text-blue-700">
+                      {task.comments_count} comment{task.comments_count === 1 ? "" : "s"}
+                    </Badge>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-32 border-slate-200 bg-slate-50" />
+                <div className="space-y-1">
+                  <DialogTitle className="text-2xl tracking-tight">{mode === "create" ? "Create issue" : "Issue details"}</DialogTitle>
+                  <DialogDescription className="max-w-2xl text-sm text-slate-500">
+                    {canManage ? "Manage ownership, sprint, delivery dates, and discussion." : "Update your status and logged time."}
+                  </DialogDescription>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <SelectField label="Issue type" value={issueType} onChange={(value) => setIssueType(value as TaskIssueType)} options={["story", "task", "bug", "epic"]} />
-                  <SelectField label="Priority" value={priority} onChange={(value) => setPriority(value as TaskPriority)} options={["low", "medium", "high", "critical"]} />
-                  <SelectField label="Status" value={status} onChange={(value) => setStatus(value as TaskStatus)} options={columns.map((column) => column.status)} />
-                  <div className="space-y-2">
-                    <Label>Due date</Label>
-                    <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="border-slate-200 bg-slate-50" />
+              </div>
+              {task && (
+                <div className="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right md:block">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Task</div>
+                  <div className="mt-1 text-lg font-semibold text-slate-900">#{task.id}</div>
+                  <div className="mt-1 max-w-[210px] truncate text-xs text-slate-500">
+                    {task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                <SelectField label="Status" value={status} onChange={(value) => setStatus(value as TaskStatus)} options={columns.map((column) => column.status)} />
-                <div className="space-y-2">
-                  <Label>Logged minutes</Label>
-                  <Input type="number" min="0" value={logged} onChange={(e) => setLogged(e.target.value)} className="border-slate-200 bg-slate-50" />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
+          </DialogHeader>
 
-            {task && (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                  <MessageSquare className="h-4 w-4 text-slate-500" />
-                  Discussion
-                </div>
-                <div className="max-h-48 space-y-2 overflow-y-auto">
-                  {comments.length === 0 ? (
-                    <p className="text-sm text-slate-400">No comments yet.</p>
-                  ) : (
-                    comments.map((item) => (
-                      <div key={item.id} className="rounded-xl bg-white px-3 py-2 text-sm">
-                        <div className="mb-1 text-xs font-medium text-slate-500">
-                          {item.author?.full_name ?? item.author?.email ?? "Unknown"}
-                        </div>
-                        <p className="whitespace-pre-wrap text-slate-700">{item.content}</p>
+          <div className="grid flex-1 gap-5 overflow-y-auto px-6 py-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">
+            <div className="space-y-5">
+              <Panel title="Core details" description="The issue brief and delivery status.">
+                {canManage ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Title</Label>
+                      <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border-slate-200 bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-40 border-slate-200 bg-white" />
+                    </div>
+                    {task?.due_date && isSuspiciousDateOnly(task.due_date) && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        Legacy due date detected on this task. Correct it before saving so executives do not see malformed data.
                       </div>
-                    ))
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Add a comment" className="border-slate-200 bg-white" />
-                  <Button onClick={submitComment} variant="outline" className="cursor-pointer">Send</Button>
-                </div>
-              </div>
-            )}
+                    )}
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <SelectField label="Issue type" value={issueType} onChange={(value) => setIssueType(value as TaskIssueType)} options={["story", "task", "bug", "epic"]} />
+                      <SelectField label="Priority" value={priority} onChange={(value) => setPriority(value as TaskPriority)} options={["low", "medium", "high", "critical"]} />
+                      <SelectField label="Status" value={status} onChange={(value) => setStatus(value as TaskStatus)} options={columns.map((column) => column.status)} />
+                      <div className="space-y-2">
+                        <Label>Due date</Label>
+                        <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="border-slate-200 bg-white" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <SelectField label="Status" value={status} onChange={(value) => setStatus(value as TaskStatus)} options={columns.map((column) => column.status)} />
+                    <div className="space-y-2">
+                      <Label>Logged minutes</Label>
+                      <Input type="number" min="0" value={logged} onChange={(e) => setLogged(e.target.value)} className="border-slate-200 bg-white" />
+                    </div>
+                  </div>
+                )}
+              </Panel>
+
+              {task && (
+                <Panel title="Discussion" description="Comments stay attached to this work item.">
+                  <div className="space-y-3">
+                    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                      {comments.length === 0 ? (
+                        <p className="text-sm text-slate-400">No comments yet.</p>
+                      ) : (
+                        comments.map((item) => (
+                          <div key={item.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
+                            <div className="mb-1 text-xs font-medium text-slate-500">
+                              {item.author?.full_name ?? item.author?.email ?? "Unknown"}
+                            </div>
+                            <p className="whitespace-pre-wrap text-slate-700">{item.content}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Add a comment" className="border-slate-200 bg-white" />
+                      <Button onClick={submitComment} variant="outline" className="cursor-pointer">Send</Button>
+                    </div>
+                  </div>
+                </Panel>
+              )}
+            </div>
+
+            <div className="space-y-5">
+              {canManage && (
+                <Panel title="Ownership" description="Who owns the work and where it belongs.">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Project</Label>
+                      <select
+                        value={projectId}
+                        onChange={(e) => {
+                          setProjectId(e.target.value)
+                          setSprintId("")
+                          setAssigneeId("")
+                        }}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      >
+                        <option value="">Select project</option>
+                        {projects.map((project) => (
+                          <option key={project.id} value={project.id}>{project.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Sprint</Label>
+                      <select value={sprintId} onChange={(e) => setSprintId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+                        <option value="">Backlog / no sprint</option>
+                        {sprintOptions.map((sprint) => (
+                          <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Assignee</Label>
+                      <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+                        <option value="">Unassigned</option>
+                        {team.length > 0 && (
+                          <optgroup label="Project team">
+                            {team.map((member) => (
+                              <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {otherByTeam.map(({ label, members }) => (
+                          <optgroup key={label} label={label}>
+                            {members.map((member) => (
+                              <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Estimate min</Label>
+                        <Input type="number" min="0" value={estimate} onChange={(e) => setEstimate(e.target.value)} className="border-slate-200 bg-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Logged min</Label>
+                        <Input type="number" min="0" value={logged} onChange={(e) => setLogged(e.target.value)} className="border-slate-200 bg-white" />
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                      <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
+                      Assigning an eligible user outside the project team adds them automatically.
+                    </div>
+                  </div>
+                </Panel>
+              )}
+
+              {task && (
+                <Panel title="Snapshot" description="A compact executive summary of this issue.">
+                  <div className="grid gap-3 text-sm">
+                    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                      <span className="text-slate-500">Project</span>
+                      <span className="font-medium text-slate-900">{task.project?.name ?? "Unassigned"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                      <span className="text-slate-500">Sprint</span>
+                      <span className="font-medium text-slate-900">{task.sprint?.name ?? "No sprint"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                      <span className="text-slate-500">Assignee</span>
+                      <span className="font-medium text-slate-900">{task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                      <span className="text-slate-500">Due date</span>
+                      <span className={`font-medium ${isPastDateOnly(task.due_date) && task.status !== "done" ? "text-red-600" : "text-slate-900"}`}>
+                        {formatTaskDate(task.due_date)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                      <span className="text-slate-500">Estimate / logged</span>
+                      <span className="font-medium text-slate-900">
+                        {task.estimate_minutes ?? "—"} / {task.logged_minutes}
+                      </span>
+                    </div>
+                  </div>
+                </Panel>
+              )}
+            </div>
           </div>
 
-          {canManage && (
-            <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="space-y-2">
-                <Label>Project</Label>
-                <select
-                  value={projectId}
-                  onChange={(e) => {
-                    setProjectId(e.target.value)
-                    setSprintId("")
-                    setAssigneeId("")
-                  }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                >
-                  <option value="">Select project</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Sprint</Label>
-                <select value={sprintId} onChange={(e) => setSprintId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
-                  <option value="">Backlog / no sprint</option>
-                  {sprintOptions.map((sprint) => (
-                    <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Assignee</Label>
-                <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
-                  <option value="">Unassigned</option>
-                  {team.length > 0 && (
-                    <optgroup label="Project team">
-                      {team.map((member) => (
-                        <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {otherByTeam.map(({ label, members }) => (
-                    <optgroup key={label} label={label}>
-                      {members.map((member) => (
-                        <option key={member.id} value={member.id}>{member.full_name ?? member.email}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Estimate min</Label>
-                  <Input type="number" min="0" value={estimate} onChange={(e) => setEstimate(e.target.value)} className="border-slate-200 bg-white" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Logged min</Label>
-                  <Input type="number" min="0" value={logged} onChange={(e) => setLogged(e.target.value)} className="border-slate-200 bg-white" />
-                </div>
-              </div>
-              <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-500">
-                <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
-                Assigning an eligible user outside the project team adds them to it automatically.
-              </div>
-            </div>
-          )}
+          <div className="border-t border-slate-200 bg-white px-6 py-4">
+            {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+            <DialogFooter className="flex items-center justify-between">
+              {mode === "edit" && canManage && (
+                <Button variant="ghost" onClick={handleDelete} disabled={busy} className="mr-auto gap-2 text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer">
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              )}
+              <DialogClose render={<Button variant="ghost" className="text-slate-500 cursor-pointer">Cancel</Button>} />
+              <Button onClick={submit} disabled={busy} className="bg-primary text-white hover:bg-primary/90 cursor-pointer">
+                {busy ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </div>
         </div>
-
-        {err && <p className="text-sm text-red-600">{err}</p>}
-
-        <DialogFooter className="flex items-center justify-between">
-          {mode === "edit" && canManage && (
-            <Button variant="ghost" onClick={handleDelete} disabled={busy} className="mr-auto gap-2 text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer">
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-          )}
-          <DialogClose render={<Button variant="ghost" className="text-slate-500 cursor-pointer">Cancel</Button>} />
-          <Button onClick={submit} disabled={busy} className="bg-primary text-white hover:bg-primary/90 cursor-pointer">
-            {busy ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function Panel({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: ReactNode
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="mb-4 space-y-1">
+        <h3 className="text-sm font-semibold tracking-tight text-slate-900">{title}</h3>
+        {description && <p className="text-xs leading-5 text-slate-500">{description}</p>}
+      </div>
+      {children}
+    </section>
   )
 }
 

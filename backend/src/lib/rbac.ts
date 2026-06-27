@@ -16,12 +16,12 @@ export function isSuperAdmin(userRole: UserRole): boolean {
 }
 
 export function canManageProject(currentUser: { id: number; role: UserRole }, ownerId: number | null): boolean {
-  if (currentUser.role === UserRole.super_admin) return true;
+  if (currentUser.role === UserRole.super_admin || currentUser.role === UserRole.ceo) return true;
   return currentUser.id === ownerId;
 }
 
 export function canManageTask(currentUser: { id: number; role: UserRole }, projectOwnerId: number | null): boolean {
-  if (currentUser.role === UserRole.super_admin) return true;
+  if (currentUser.role === UserRole.super_admin || currentUser.role === UserRole.ceo) return true;
   return currentUser.id === projectOwnerId;
 }
 
