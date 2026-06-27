@@ -75,9 +75,9 @@ model User {
   ownedProjects    Project[]        @relation("ProjectOwner")
   submittedReviews ReviewRequest[]  @relation("ReviewSubmitter")
   reviewedReviews  ReviewRequest[]  @relation("ReviewReviewer")
-  authoredComments Comment[]        @relation("CommentAuthor")
-  sentMessages     Message[]        @relation("MessageSender")
-  receivedMessages Message[]        @relation("MessageRecipient")
+  authoredReviewComments ReviewComment[] @relation("ReviewCommentAuthor")
+  sentDirectMessages     DirectMessage[]  @relation("DirectMessageSender")
+  receivedDirectMessages DirectMessage[]  @relation("DirectMessageRecipient")
   memberships      ProjectMember[]
   assignedTasks    Task[]           @relation("TaskAssignee")
   createdTasks     Task[]           @relation("TaskCreator")
@@ -138,7 +138,7 @@ model ReviewRequest {
   submitter          User?           @relation("ReviewSubmitter", fields: [submitterId], references: [id], onDelete: SetNull)
   reviewerId         Int?            @map("reviewer_id")
   reviewer           User?           @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  comments           Comment[]
+  reviewComments     ReviewComment[]
   createdAt          DateTime?       @default(now()) @map("created_at")
   updatedAt          DateTime?       @updatedAt @map("updated_at")
 
@@ -146,16 +146,17 @@ model ReviewRequest {
   @@map("review_requests")
 }
 
-model Comment {
-  id               Int           @id @default(autoincrement())
-  content          String
-  reviewRequestId  Int?          @map("review_request_id")
+model ReviewComment {
+  id              Int            @id @default(autoincrement())
+  content         String
+  reviewRequestId Int?           @map("review_request_id")
   reviewRequest    ReviewRequest? @relation(fields: [reviewRequestId], references: [id], onDelete: Cascade)
-  authorId         Int?          @map("author_id")
-  author           User?         @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  createdAt        DateTime?     @default(now()) @map("created_at")
+  authorId        Int?           @map("author_id")
+  author          User?          @relation("ReviewCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt       DateTime?      @default(now()) @map("created_at")
 
-  @@map("comments")
+  @@index([reviewRequestId, createdAt, id])
+  @@map("review_comments")
 }
 
 model Sprint {
@@ -176,19 +177,19 @@ model Sprint {
   @@map("sprints")
 }
 
-model Message {
-  id           Int       @id @default(autoincrement())
-  content      String
-  senderId     Int       @map("sender_id")
-  sender       User      @relation("MessageSender", fields: [senderId], references: [id])
-  recipientId  Int       @map("recipient_id")
-  recipient    User      @relation("MessageRecipient", fields: [recipientId], references: [id])
-  isRead       Boolean   @default(false) @map("is_read")
-  createdAt    DateTime? @default(now()) @map("created_at")
+model DirectMessage {
+  id          Int       @id @default(autoincrement())
+  content     String
+  senderId    Int       @map("sender_id")
+  sender      User      @relation("DirectMessageSender", fields: [senderId], references: [id])
+  recipientId Int       @map("recipient_id")
+  recipient   User      @relation("DirectMessageRecipient", fields: [recipientId], references: [id])
+  isRead      Boolean   @default(false) @map("is_read")
+  createdAt   DateTime? @default(now()) @map("created_at")
 
-  @@index([senderId])
-  @@index([recipientId])
-  @@map("messages")
+  @@index([senderId, recipientId, createdAt, id])
+  @@index([recipientId, senderId, createdAt, id])
+  @@map("direct_messages")
 }
 
 model Task {

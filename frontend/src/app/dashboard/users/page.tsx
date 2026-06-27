@@ -208,6 +208,11 @@ function UserDialog({
   const [err, setErr] = useState<string | null>(null)
   const [magicLink, setMagicLink] = useState<string | null>(null)
 
+  const closeSuccessDialog = () => {
+    setMagicLink(null)
+    setOpen(false)
+  }
+
   const submit = async () => {
     if (!email.trim()) {
       setErr("Email is required")
@@ -234,8 +239,18 @@ function UserDialog({
 
   if (magicLink) {
     return (
-      <Dialog open={true} onOpenChange={(val) => { if (!val) { setMagicLink(null); setOpen(false) } }}>
-        <DialogContent className="border-slate-200 bg-white text-slate-900 sm:max-w-md">
+      <Dialog
+        open={Boolean(magicLink)}
+        onOpenChange={(val) => {
+          if (!val) {
+            closeSuccessDialog()
+          }
+        }}
+      >
+        <DialogContent
+          onClose={closeSuccessDialog}
+          className="border-slate-200 bg-white text-slate-900 sm:max-w-md"
+        >
           <DialogHeader>
             <DialogTitle>User Created!</DialogTitle>
             <DialogDescription>

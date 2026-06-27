@@ -29,7 +29,7 @@ export const requireAuth = asyncHandler(async (req: Request, _res: Response, nex
     throw unauthorized();
   }
 
-  req.authUser = { id: user.id, role: user.role };
+  req.authUser = { id: user.id, role: user.role, email: user.email, fullName: user.fullName };
   next();
 });
 

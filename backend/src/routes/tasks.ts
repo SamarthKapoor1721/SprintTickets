@@ -9,6 +9,7 @@ import { badRequest, forbidden, notFound, unauthorized } from "../lib/http-error
 import { requireAuth } from "../middleware/auth";
 import { serializeTask, serializeTaskComment } from "../lib/serializers";
 import { canManageTask, hasMinimumRole, taskAccessWhere } from "../lib/rbac";
+import { sendTaskCommentEmail } from "../lib/email";
 
 export const tasksRouter = Router();
 
@@ -339,7 +340,7 @@ tasksRouter.post(
     const taskId = Number(req.params.taskId);
     if (!Number.isInteger(taskId)) throw notFound("Task not found");
     const body = parseBody(taskCommentCreateSchema, req.body);
-    await findAccessibleTaskOrThrow(taskId, req.authUser);
+    const task = await findAccessibleTaskOrThrow(taskId, req.authUser);
 
     const comment = await prisma.taskComment.create({
       data: {
@@ -349,6 +350,21 @@ tasksRouter.post(
       },
       include: { author: true },
     });
+
+    const recipientEmails = new Set<string>();
+    if (task.assignee?.email && task.assignee.id !== req.authUser.id) {
+      recipientEmails.add(task.assignee.email);
+    }
+    if (task.creator?.email && task.creator.id !== req.authUser.id) {
+      recipientEmails.add(task.creator.email);
+    }
+
+    sendTaskCommentEmail(
+      Array.from(recipientEmails),
+      task.title,
+      req.authUser.fullName || req.authUser.email,
+      body.content
+    ).catch(console.error);
 
     res.status(201).json(serializeTaskComment(comment));
   }),
