@@ -16,6 +16,7 @@ import { reportsRouter } from "./routes/reports";
 import { sprintsRouter } from "./routes/sprints";
 import { dashboardRouter } from "./routes/dashboard";
 import { summarizeRouter } from "./routes/summarize";
+import { activityRouter } from "./routes/activity";
 
 export const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/v1/reports", reportsRouter);
 app.use("/api/v1/sprints", sprintsRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 app.use("/api/v1/summarize", summarizeRouter);
+app.use("/api/v1/activity", activityRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ detail: "Not found" });

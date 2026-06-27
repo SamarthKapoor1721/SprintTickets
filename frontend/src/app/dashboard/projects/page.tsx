@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { Crown, Plus, Users } from "lucide-react"
+import { Crown, ImagePlus, Plus, Users, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createProject, listProjects, type Project, type User } from "@/lib/api"
+import { fileToLogoDataUrl } from "@/lib/image"
+import { TeamLogo } from "@/components/team-logo"
 import { useAuth } from "@/lib/auth-context"
 
 const statusStyles: Record<string, string> = {
@@ -35,6 +37,7 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }
 function initials(u: User) {
   return (u.full_name ?? u.email).slice(0, 1).toUpperCase()
 }
+
 
 // Owner (lead) first, then members, de-duplicated — used for the avatar stack.
 function teamOf(p: Project): { user: User; lead: boolean }[] {
@@ -109,15 +112,20 @@ export default function ProjectsPage() {
                 <Link href={`/dashboard/projects/${p.id}`}>
                   <Card className="glass flex h-full flex-col border-none transition-all hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
                     <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base text-slate-900">{p.name}</CardTitle>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <TeamLogo name={p.name} logo={p.logo} size={40} />
+                          <div className="min-w-0">
+                            <CardTitle className="truncate text-base text-slate-900">{p.name}</CardTitle>
+                            <CardDescription className="text-slate-500">
+                              {p.department ?? "No department"}
+                            </CardDescription>
+                          </div>
+                        </div>
                         <Badge className={`border-none capitalize ${statusStyles[p.status] ?? ""}`}>
                           {p.status.replace("_", " ")}
                         </Badge>
                       </div>
-                      <CardDescription className="text-slate-500">
-                        {p.department ?? "No department"}
-                      </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-1 flex-col justify-between gap-4">
                       <p className="line-clamp-2 text-sm text-slate-500">
@@ -166,8 +174,18 @@ function NewProjectDialog({ onCreated }: { onCreated: () => void }) {
   const [description, setDescription] = useState("")
   const [department, setDepartment] = useState("")
   const [status, setStatus] = useState("active")
+  const [logo, setLogo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  const handleLogoChange = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      setLogo(await fileToLogoDataUrl(file))
+    } catch {
+      setErr("Could not load that image")
+    }
+  }
 
   const submit = async () => {
     if (!name.trim()) {
@@ -177,11 +195,12 @@ function NewProjectDialog({ onCreated }: { onCreated: () => void }) {
     setSubmitting(true)
     setErr(null)
     try {
-      await createProject({ name, description, department, status })
+      await createProject({ name, description, department, status, logo })
       setName("")
       setDescription("")
       setDepartment("")
       setStatus("active")
+      setLogo(null)
       setOpen(false)
       onCreated()
     } catch (e) {
@@ -208,6 +227,31 @@ function NewProjectDialog({ onCreated }: { onCreated: () => void }) {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label className="text-slate-700">Logo</Label>
+            <div className="flex items-center gap-3">
+              <TeamLogo name={name || "?"} logo={logo} size={48} />
+              <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100">
+                <ImagePlus className="h-4 w-4" />
+                {logo ? "Change" : "Upload"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleLogoChange(e.target.files?.[0])}
+                />
+              </label>
+              {logo && (
+                <button
+                  type="button"
+                  onClick={() => setLogo(null)}
+                  className="flex h-9 items-center gap-1 rounded-lg px-2 text-sm text-slate-400 transition-colors hover:text-red-600 cursor-pointer"
+                >
+                  <X className="h-4 w-4" /> Remove
+                </button>
+              )}
+            </div>
+          </div>
           <div className="space-y-2">
             <Label className="text-slate-700">Name</Label>
             <Input

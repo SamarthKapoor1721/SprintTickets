@@ -53,7 +53,7 @@ export default function ReviewList({ title, description, status }: ReviewListPro
       .finally(() => setLoading(false))
   }, [status])
 
-  const cols = "grid-cols-[90px_1fr_minmax(150px,200px)_140px]"
+  const gridCols = "sm:grid sm:grid-cols-[90px_1fr_minmax(140px,200px)_130px]"
 
   return (
     <motion.div initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -63,7 +63,8 @@ export default function ReviewList({ title, description, status }: ReviewListPro
       </div>
 
       <div className="overflow-hidden rounded-[14px] border border-[#eef2f7] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-        <div className={`grid ${cols} gap-3.5 border-b border-[#f1f5f9] px-5 py-3 text-[11.5px] font-semibold uppercase tracking-[0.04em] text-slate-400`}>
+        {/* Header — desktop table only */}
+        <div className={`hidden ${gridCols} gap-3.5 border-b border-[#f1f5f9] px-5 py-3 text-[11.5px] font-semibold uppercase tracking-[0.04em] text-slate-400`}>
           <div>Ticket</div>
           <div>Title</div>
           <div>Submitter</div>
@@ -79,17 +80,32 @@ export default function ReviewList({ title, description, status }: ReviewListPro
         ) : (
           reviews.map((r) => {
             const st = statusStyles[r.status] ?? statusStyles.pending
+            const isUrgent = r.priority === "critical" || r.priority === "high"
             return (
               <div
                 key={r.id}
                 onClick={() => router.push(`/dashboard/reviews/${r.id}`)}
-                className={`grid ${cols} cursor-pointer items-center gap-3.5 border-b border-[#f5f8fb] px-5 py-3.5 transition-colors last:border-b-0 hover:bg-[#fafbfd]`}
+                className={`block ${gridCols} cursor-pointer border-b border-[#f5f8fb] px-4 py-3.5 transition-colors last:border-b-0 hover:bg-[#fafbfd] sm:items-center sm:gap-3.5 sm:px-5`}
               >
-                <div className="font-mono text-[12px] font-medium text-slate-500">{ticketId(r.id)}</div>
+                {/* Mobile top line: ticket + status */}
+                <div className="mb-1.5 flex items-center justify-between gap-2 sm:hidden">
+                  <span className="font-mono text-[12px] font-medium text-slate-500">{ticketId(r.id)}</span>
+                  <span
+                    className="flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                    style={{ color: st.color, background: st.bg }}
+                  >
+                    {st.label}
+                  </span>
+                </div>
+
+                {/* Ticket — desktop only */}
+                <div className="hidden font-mono text-[12px] font-medium text-slate-500 sm:block">{ticketId(r.id)}</div>
+
+                {/* Title */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-[13.5px] font-medium text-slate-800">{r.title}</span>
-                    {(r.priority === "critical" || r.priority === "high") && (
+                    {isUrgent && (
                       <span className="flex-shrink-0 rounded-[5px] bg-[#fef2f2] px-1.5 py-px text-[10px] font-semibold text-red-600">
                         Urgent
                       </span>
@@ -97,7 +113,9 @@ export default function ReviewList({ title, description, status }: ReviewListPro
                   </div>
                   <div className="mt-0.5 text-[11.5px] text-slate-400">{timeAgo(r.created_at)}</div>
                 </div>
-                <div className="flex min-w-0 items-center gap-2">
+
+                {/* Submitter */}
+                <div className="mt-2 flex min-w-0 items-center gap-2 sm:mt-0">
                   <div
                     className="flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-[7px] text-[11px] font-semibold text-white"
                     style={{ background: avatarColor(r.submitter_id ?? r.id) }}
@@ -106,7 +124,9 @@ export default function ReviewList({ title, description, status }: ReviewListPro
                   </div>
                   <span className="truncate text-[13px] text-slate-600">{r.submitter?.full_name ?? "Unknown"}</span>
                 </div>
-                <div>
+
+                {/* Status — desktop only */}
+                <div className="hidden sm:block">
                   <span
                     className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
                     style={{ color: st.color, background: st.bg }}

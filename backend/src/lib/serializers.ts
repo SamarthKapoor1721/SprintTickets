@@ -11,6 +11,7 @@ import type {
   DailyProgressReport,
   DailyProgressReportTask,
   ReportAttachment,
+  ReviewAttachment,
 } from "@prisma/client";
 
 import { buildReportInsights } from "./report-insights";
@@ -105,6 +106,7 @@ export function serializeProject(
     name: project.name,
     description: project.description,
     department: project.department,
+    logo: project.logo,
     status: project.status,
     owner_id: project.ownerId,
     owner: project.owner ? serializeUser(project.owner) : null,

@@ -7,6 +7,7 @@ import {
   deleteReport,
   deleteReportAttachment,
   downloadReportAttachment,
+  getReportAttachmentUrl,
   getAISummary,
   listProjects,
   listReports,
@@ -35,12 +36,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { formatDateOnly, normalizeDateOnly, todayInputValue } from "@/lib/date"
+import { FilePreviewModal, isPreviewable } from "@/components/file-preview"
 import {
   CalendarDays,
   CheckSquare,
   Clock3,
   Download,
   Edit3,
+  Eye,
   FileText,
   Paperclip,
   Plus,
@@ -327,6 +330,7 @@ function ReportCard({
 }) {
   const [error, setError] = useState<string | null>(null)
   const [busyAttachmentId, setBusyAttachmentId] = useState<number | null>(null)
+  const [previewAttachment, setPreviewAttachment] = useState<ReportAttachment | null>(null)
 
   const handleDelete = async () => {
     if (!confirm("Delete this daily update?")) return
@@ -453,6 +457,17 @@ function ReportCard({
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
+                      {isPreviewable(attachment.mime_type, attachment.file_name) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPreviewAttachment(attachment)}
+                          className="h-8 w-8 cursor-pointer text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                          title="Preview"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -483,6 +498,12 @@ function ReportCard({
           {error && <p className="text-sm text-red-600">{error}</p>}
         </CardContent>
       </Card>
+
+      <FilePreviewModal
+        file={previewAttachment}
+        loadUrl={(f) => getReportAttachmentUrl(report.id, f.id)}
+        onClose={() => setPreviewAttachment(null)}
+      />
     </motion.div>
   )
 }

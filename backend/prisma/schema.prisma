@@ -96,6 +96,7 @@ model Project {
   name         String
   description  String?
   department   String?
+  logo         String?
   status       ProjectStatus    @default(active)
   ownerId      Int?             @map("owner_id")
   owner        User?            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)

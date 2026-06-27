@@ -12,28 +12,23 @@ import {
   MessageSquare,
   Sparkles,
   X,
-  FileText,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   addReviewComment,
   getAISummary,
   getReview,
+  getReviewAttachmentUrl,
   listReviewComments,
   updateReview,
   type ReviewComment,
   type Review,
   type ReviewStatus,
 } from "@/lib/api"
+import { FilePreview } from "@/components/file-preview"
 import { useAuth } from "@/lib/auth-context"
 
 const priorityStyles: Record<string, string> = {
@@ -98,7 +93,6 @@ export default function ReviewDetailPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<{ url: string; title: string } | null>(null)
 
   const canDecide = role === "ceo" || role === "manager" || role === "super_admin"
 
@@ -314,18 +308,17 @@ export default function ReviewDetailPage() {
             <div className="pt-2">
               <p className="mb-2 text-slate-400">Deliverables</p>
               <div className="flex flex-wrap gap-2">
-                {links.map(({ key, label }) => {
-                  const url = ensureAbsoluteUrl(String(review[key]))
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setPreviewUrl({ url, title: label })}
-                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
-                    >
-                      {label} <ExternalLink className="h-3 w-3" />
-                    </button>
-                  )
-                })}
+                {links.map(({ key, label }) => (
+                  <a
+                    key={key}
+                    href={ensureAbsoluteUrl(String(review[key]))}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
+                  >
+                    {label} <ExternalLink className="h-3 w-3" />
+                  </a>
+                ))}
               </div>
             </div>
           )}
@@ -334,54 +327,17 @@ export default function ReviewDetailPage() {
               <p className="mb-2 text-slate-400">Attachments</p>
               <div className="flex flex-col gap-2">
                 {review.attachments.map((a) => (
-                  <div key={a.id} className="flex items-center gap-3 overflow-hidden rounded-[8px] border border-slate-200 bg-slate-50">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-slate-100">
-                      <FileText className="h-5 w-5 text-slate-400" />
-                    </div>
-                    <div className="min-w-0 flex-1 py-1">
-                      <p className="truncate text-[13px] font-medium text-slate-700">{a.file_name}</p>
-                      <p className="text-[11px] text-slate-400">
-                        {a.size_bytes < 1024 * 1024
-                          ? `${(a.size_bytes / 1024).toFixed(1)} KB`
-                          : `${(a.size_bytes / (1024 * 1024)).toFixed(1)} MB`}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        setPreviewUrl({
-                          url: `/api/v1/reviews/${review.id}/attachments/${a.id}`,
-                          title: a.file_name,
-                        })
-                      }
-                      className="mr-3 flex h-8 w-8 items-center justify-center rounded-[6px] text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 cursor-pointer"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <FilePreview
+                    key={a.id}
+                    file={a}
+                    loadUrl={(f) => getReviewAttachmentUrl(review.id, f.id)}
+                  />
                 ))}
               </div>
             </div>
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
-        <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b shrink-0 bg-white">
-            <DialogTitle className="text-lg text-slate-900">{previewUrl?.title}</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 bg-slate-100">
-            {previewUrl && (
-              <iframe
-                src={previewUrl.url}
-                className="w-full h-full border-none"
-                title={previewUrl.title}
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Card className="glass border-none">
         <CardHeader>

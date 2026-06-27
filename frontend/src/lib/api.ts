@@ -72,6 +72,27 @@ async function requestMultipart<T>(path: string, body: FormData, options: Reques
   return res.json() as Promise<T>
 }
 
+// Fetch a protected binary resource (e.g. a PDF attachment) with the JWT
+// attached, and return an object URL the browser can preview/download.
+// The caller is responsible for revoking the URL with URL.revokeObjectURL.
+export async function fetchBlobUrl(path: string): Promise<string> {
+  const token = getToken()
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to load file (${res.status})`)
+  }
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
+export const getReviewAttachmentUrl = (reviewId: number, attachmentId: number) =>
+  fetchBlobUrl(`/reviews/${reviewId}/attachments/${attachmentId}`)
+
+export const getReportAttachmentUrl = (reportId: number, attachmentId: number) =>
+  fetchBlobUrl(`/reports/${reportId}/attachments/${attachmentId}`)
+
 // ---- Types ----
 export type Role = "super_admin" | "ceo" | "manager" | "employee"
 export type ReviewStatus = "pending" | "approved" | "rejected" | "needs_changes"
@@ -118,6 +139,7 @@ export interface Project {
   name: string
   description: string | null
   department: string | null
+  logo: string | null
   status: string
   owner_id: number | null
   owner: User | null
@@ -440,6 +462,7 @@ export interface ProjectCreate {
   name: string
   description?: string
   department?: string
+  logo?: string | null
   status?: string
 }
 
@@ -447,6 +470,7 @@ export interface ProjectUpdate {
   name?: string
   description?: string | null
   department?: string | null
+  logo?: string | null
   status?: string
   owner_id?: number | null
 }
@@ -715,3 +739,25 @@ export interface AISummary {
   generated_at: string
 }
 export const getAISummary = () => request<AISummary>("/summarize", { method: "POST" })
+
+export type ActivityType =
+  | "review_submitted"
+  | "review_decision"
+  | "review_comment"
+  | "report_submitted"
+  | "task_created"
+  | "task_updated"
+
+export interface ActivityItem {
+  id: string
+  type: ActivityType
+  actor: string
+  action: string
+  target: string | null
+  title: string
+  status: string | null
+  link: string
+  timestamp: string
+}
+
+export const getActivity = () => request<ActivityItem[]>("/activity")
