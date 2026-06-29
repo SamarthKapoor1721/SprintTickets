@@ -16,6 +16,23 @@ type InviteEmailArgs = {
 
 let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
 
+function getTransportConfigError() {
+  if (env.SMTP_URL) {
+    return null;
+  }
+
+  const missing: string[] = [];
+  if (!env.SMTP_HOST) missing.push("SMTP_HOST");
+  if (!env.SMTP_USER) missing.push("SMTP_USER");
+  if (!env.SMTP_PASS) missing.push("SMTP_PASS");
+
+  if (missing.length === 0) {
+    return null;
+  }
+
+  return `Email delivery is not configured. Missing ${missing.join(", ")} (or set SMTP_URL).`;
+}
+
 function getTransport() {
   if (transport) {
     return transport;
@@ -66,7 +83,7 @@ export async function sendOnboardingInvite({
   if (!mailer) {
     return {
       sent: false,
-      error: "Email delivery is not configured",
+      error: getTransportConfigError() ?? "Email delivery is not configured",
     };
   }
 
