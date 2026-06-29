@@ -4,9 +4,9 @@ import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { onboard } from "@/lib/api"
+import { PasswordField } from "@/components/password-field"
 
 function OnboardForm() {
   const router = useRouter()
@@ -17,8 +17,7 @@ function OnboardForm() {
   const [error, setError] = useState<string | null>(null)
   
   const [password, setPassword] = useState("")
-  const [fullName, setFullName] = useState("")
-  const [department, setDepartment] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
 
   if (!token) {
     return (
@@ -33,9 +32,17 @@ function OnboardForm() {
   const handleOnboard = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
     setLoading(true)
     try {
-      await onboard(token, password, fullName, department)
+      await onboard(token, password)
       router.push("/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Onboarding failed.")
@@ -59,7 +66,7 @@ function OnboardForm() {
             className="mb-5 h-12 w-12 rounded-xl object-contain shadow-lg shadow-primary/20"
           />
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome!</h1>
-          <p className="mt-1.5 text-sm text-slate-500">Complete your profile to join the workspace.</p>
+          <p className="mt-1.5 text-sm text-slate-500">Set a password to join the workspace.</p>
         </div>
 
         <div className="glass rounded-2xl p-7">
@@ -71,38 +78,28 @@ function OnboardForm() {
 
           <form onSubmit={handleOnboard} className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-slate-500">Full Name</Label>
-              <Input 
-                type="text" 
-                placeholder="Jane Doe" 
-                className="rounded-xl border-slate-200 bg-slate-50" 
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+              <Label className="text-xs font-medium text-slate-500">Password</Label>
+              <PasswordField
+                placeholder="••••••••"
+                className="rounded-xl border-slate-200 bg-slate-50"
+                value={password}
+                onChange={setPassword}
                 required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-slate-500">Department</Label>
-              <Input 
-                type="text" 
-                placeholder="Engineering" 
-                className="rounded-xl border-slate-200 bg-slate-50" 
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
+                minLength={8}
+                autoComplete="new-password"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-slate-500">Password</Label>
-              <Input 
-                type="password" 
-                placeholder="••••••••" 
+              <Label className="text-xs font-medium text-slate-500">Confirm Password</Label>
+              <PasswordField
+                placeholder="••••••••"
                 className="rounded-xl border-slate-200 bg-slate-50"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={confirmPassword}
+                onChange={setConfirmPassword}
                 required
                 minLength={8}
+                autoComplete="new-password"
               />
             </div>
 

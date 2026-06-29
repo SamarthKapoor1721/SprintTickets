@@ -110,6 +110,7 @@ export interface User {
   department: string | null
   role: Role
   is_active: boolean
+  onboarding_pending: boolean
 }
 
 export interface UserDetailCounts {
@@ -123,7 +124,6 @@ export interface UserDetailCounts {
 }
 
 export interface UserDetail extends User {
-  onboarding_pending: boolean
   counts: UserDetailCounts
   owned_projects: Project[]
   member_projects: Project[]
@@ -183,7 +183,7 @@ export interface Review {
   github_repo: string | null
   figma_link: string | null
   documentation_link: string | null
-  tech_details: any
+  tech_details: unknown
   project_id: number | null
   submitter_id: number | null
   submitter: User | null
@@ -379,10 +379,8 @@ export async function register(data: { email: string; password: string; full_nam
 
 export const getMe = () => request<User>("/auth/me")
 
-export async function onboard(token: string, password: string, full_name?: string, department?: string): Promise<string> {
+export async function onboard(token: string, password: string): Promise<string> {
   const body = new URLSearchParams({ token, password })
-  if (full_name) body.append("full_name", full_name)
-  if (department) body.append("department", department)
   
   const res = await request<{ access_token: string }>("/auth/onboard", {
     method: "POST",

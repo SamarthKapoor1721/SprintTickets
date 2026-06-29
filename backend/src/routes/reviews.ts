@@ -163,6 +163,9 @@ reviewsRouter.post(
     if (!req.authUser) {
       throw unauthorized();
     }
+    if (body.reviewer_ids?.includes(req.authUser.id)) {
+      throw badRequest("You cannot assign yourself as a reviewer");
+    }
 
     const data: Prisma.ReviewRequestUncheckedCreateInput = {
       title: body.title,
@@ -269,6 +272,9 @@ reviewsRouter.patch(
     }
     if (!isDecision && review.submitterId !== authUserId && !isPrivileged) {
       throw forbidden("Not your review");
+    }
+    if (body.reviewer_ids?.includes(authUserId)) {
+      throw badRequest("You cannot assign yourself as a reviewer");
     }
 
     const data: Prisma.ReviewRequestUpdateInput = {

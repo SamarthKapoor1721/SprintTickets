@@ -27,6 +27,7 @@ export function serializeUser(user: UserWithRelations) {
     department: user.department,
     role: user.role,
     is_active: user.isActive,
+    onboarding_pending: Boolean(user.onboardingToken) || !user.hashedPassword,
   };
 }
 
@@ -73,7 +74,6 @@ export function serializeUserDetail(
 
   return {
     ...serializeUser(user),
-    onboarding_pending: Boolean(user.onboardingToken) || !user.hashedPassword,
     counts: {
       owned_projects: ownedProjects.length,
       member_projects: memberProjects.length,

@@ -142,8 +142,11 @@ export default function NewReviewPage() {
       </div>
 
       {(() => {
-        const ceos = users.filter((u) => u.role === "ceo")
-        const managers = users.filter((u) => u.role === "manager")
+        const reviewerOptions = users.filter(
+          (u) => (u.role === "ceo" || u.role === "manager") && u.id !== user?.id,
+        )
+        const ceos = reviewerOptions.filter((u) => u.role === "ceo")
+        const managers = reviewerOptions.filter((u) => u.role === "manager")
         return (
       <div className="grid gap-6">
         <Card className="glass border-none">
@@ -165,7 +168,7 @@ export default function NewReviewPage() {
               <div className="space-y-2">
                 <Label className="text-slate-700">Send To (Reviewers)</Label>
                 <div className="flex flex-col gap-3 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  {ceos.map(u => (
+                  {ceos.map((u) => (
                     <label key={u.id} className="flex items-center gap-3 cursor-pointer">
                       <input 
                         type="checkbox" 
@@ -184,7 +187,7 @@ export default function NewReviewPage() {
                       <span className="text-[13px] font-medium text-slate-700">{u.full_name ?? u.email} <span className="ml-1 text-[11px] text-slate-400 font-normal border rounded px-1 py-0.5">CEO</span></span>
                     </label>
                   ))}
-                  {managers.map(u => (
+                  {managers.map((u) => (
                     <label key={u.id} className="flex items-center gap-3 cursor-pointer">
                       <input 
                         type="checkbox" 
@@ -204,7 +207,7 @@ export default function NewReviewPage() {
                     </label>
                   ))}
                   {ceos.length === 0 && managers.length === 0 && (
-                    <div className="text-sm text-slate-500">No managers or CEOs available</div>
+                    <div className="text-sm text-slate-500">No reviewers available</div>
                   )}
                 </div>
               </div>
@@ -338,6 +341,7 @@ export default function NewReviewPage() {
                     >
                       {/* Thumbnail (image) or icon */}
                       {isImg ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={a.url}
                           alt={a.file.name}
