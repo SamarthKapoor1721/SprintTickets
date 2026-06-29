@@ -10,6 +10,7 @@ import {
   deleteUser,
   type Role,
   type User,
+  type UserInvite,
 } from "@/lib/api"
 import { TEAMS } from "@/lib/teams"
 import { Badge } from "@/components/ui/badge"
@@ -25,14 +26,40 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getAppBaseUrl } from "@/lib/site"
-import { Eye, Pencil, Trash2, UserPlus, Users } from "lucide-react"
+import { Eye, Pencil, Trash2, UserPlus, Users, Copy, ExternalLink } from "lucide-react"
 
 const ROLE_COLORS: Record<string, string> = {
   ceo: "bg-blue-100 text-blue-700",
   manager: "bg-violet-100 text-violet-700",
   employee: "bg-slate-100 text-slate-600",
   super_admin: "bg-amber-100 text-amber-700",
+}
+
+type InviteNotice = {
+  kind: "success" | "warning"
+  title: string
+  description: string
+  link: string
+}
+
+type InviteResult = {
+  email?: string
+  emailSent?: boolean
+  emailError?: string | null
+  onboardingUrl?: string | null
+}
+
+type UserGroup = {
+  label: string
+  members: User[]
+}
+
+function getUserCategory(user: User) {
+  const dept = user.department?.trim()
+  if (user.role === "ceo" || dept?.toLowerCase() === "ai pm") {
+    return "CEO"
+  }
+  return dept || "Other"
 }
 
 export default function UsersPage() {
@@ -46,6 +73,8 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [inviteNotice, setInviteNotice] = useState<InviteNotice | null>(null)
+  const [activeCategory, setActiveCategory] = useState<string>("All")
 
   const load = useCallback(() => {
     setLoading(true)
@@ -70,21 +99,60 @@ export default function UsersPage() {
     }
   }
 
+  const showInviteNotice = (result: InviteResult) => {
+    if (!result.onboardingUrl) {
+      return
+    }
+
+    setInviteNotice({
+      kind: result.emailSent ? "success" : "warning",
+      title: result.emailSent ? "Invitation sent" : "Invite link ready",
+      description: result.emailSent
+        ? `The invite email was sent to ${result.email ?? "the user"} and the link is available below.`
+        : result.emailError ??
+          "Email delivery is not configured, but the invite link is available below.",
+      link: result.onboardingUrl,
+    })
+  }
+
+  const handleCreateUser = (result: UserInvite) => {
+    showInviteNotice(result)
+    load()
+  }
+
   if (role === "employee") {
     return <div className="text-sm text-slate-500">You do not have access to view users.</div>
   }
 
   const visibleUsers = role === "ceo" ? users.filter((u) => u.role !== "super_admin") : users
 
-  // Group users: known teams first (in order), then "Other" for anyone with a non-standard or null dept
-  const grouped: { label: string; members: User[] }[] = TEAMS.map((team) => ({
-    label: team,
-    members: visibleUsers.filter((u) => u.department === team),
-  })).filter((g) => g.members.length > 0)
+  const groupedMap = new Map<string, User[]>()
+  for (const u of visibleUsers) {
+    const label = getUserCategory(u)
+    const members = groupedMap.get(label) ?? []
+    members.push(u)
+    groupedMap.set(label, members)
+  }
 
-  const knownDepts = new Set(TEAMS as readonly string[])
-  const others = visibleUsers.filter((u) => !u.department || !knownDepts.has(u.department))
-  if (others.length > 0) grouped.push({ label: "Other", members: others })
+  const groups: UserGroup[] = Array.from(groupedMap.entries())
+    .map(([label, members]) => ({
+      label,
+      members: [...members].sort((a, b) =>
+        (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email),
+      ),
+    }))
+    .sort((a, b) => {
+      if (a.label === "CEO") return -1
+      if (b.label === "CEO") return 1
+      if (a.label === "Other") return 1
+      if (b.label === "Other") return -1
+      return a.label.localeCompare(b.label)
+    })
+
+  const categoryCounts = groups.map((group) => ({ label: group.label, count: group.members.length }))
+  const selectedGroups = activeCategory === "All"
+    ? groups
+    : groups.filter((group) => group.label === activeCategory)
 
   return (
     <div className="flex flex-col gap-8">
@@ -93,8 +161,83 @@ export default function UsersPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Users</h1>
           <p className="text-slate-500">Manage directory and system access.</p>
         </div>
-        {canCreateUsers && <UserDialog onSaved={load} currentRole={role} />}
+        {canCreateUsers && <UserDialog onCreated={handleCreateUser} currentRole={role} />}
       </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant={activeCategory === "All" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setActiveCategory("All")}
+          className="rounded-full"
+        >
+          All
+          <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-[11px] leading-none">
+            {visibleUsers.length}
+          </span>
+        </Button>
+        {categoryCounts.map(({ label, count }) => (
+          <Button
+            key={label}
+            type="button"
+            variant={activeCategory === label ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveCategory(label)}
+            className="rounded-full"
+          >
+            {label}
+            <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-[11px] leading-none">
+              {count}
+            </span>
+          </Button>
+        ))}
+      </div>
+
+      {inviteNotice && (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            inviteNotice.kind === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-amber-200 bg-amber-50 text-amber-900"
+          }`}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="font-medium">{inviteNotice.title}</p>
+              <p className={inviteNotice.kind === "success" ? "text-emerald-700" : "text-amber-700"}>
+                {inviteNotice.description}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigator.clipboard.writeText(inviteNotice.link)}
+                className="cursor-pointer border-white/70 bg-white text-slate-700 hover:bg-white"
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Copy link
+              </Button>
+              <a
+                href={inviteNotice.link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center rounded-lg border border-white/70 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-white/90"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open invite
+              </a>
+              <Button
+                variant="ghost"
+                onClick={() => setInviteNotice(null)}
+                className="cursor-pointer text-slate-500 hover:bg-white/70"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -106,9 +249,13 @@ export default function UsersPage() {
         <div className="text-sm text-slate-500">No users found.</div>
       ) : (
         <div className="flex flex-col gap-8">
-          {grouped.map(({ label, members }) => (
-            <section key={label}>
-              {/* Team header */}
+          {selectedGroups.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-sm text-slate-500">
+              No users found in this category.
+            </div>
+          ) : (
+            selectedGroups.map(({ label, members }) => (
+              <section key={label}>
               <div className="mb-3 flex items-center gap-2">
                 <Users className="h-4 w-4 text-slate-400" strokeWidth={1.8} />
                 <h2 className="text-[14px] font-semibold text-slate-800">{label}</h2>
@@ -142,9 +289,11 @@ export default function UsersPage() {
                         <p className="truncate text-[14px] font-medium text-slate-900">
                           {u.full_name ?? "Unnamed"}
                         </p>
-                        <p className="truncate text-[12.5px] text-slate-400">
-                          {u.email} · #{u.employee_id}
-                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                          <p className="truncate text-[12.5px] text-slate-400">
+                            {u.email} · #{u.employee_id}
+                          </p>
+                        </div>
                       </div>
 
                       {/* Role */}
@@ -193,7 +342,8 @@ export default function UsersPage() {
                 })}
               </div>
             </section>
-          ))}
+            ))
+          )}
         </div>
       )}
     </div>
@@ -201,10 +351,10 @@ export default function UsersPage() {
 }
 
 function UserDialog({
-  onSaved,
+  onCreated,
   currentRole,
 }: {
-  onSaved: () => void
+  onCreated: (result: UserInvite) => void
   currentRole: Role
 }) {
   const [open, setOpen] = useState(false)
@@ -214,16 +364,10 @@ function UserDialog({
   const [role, setRole] = useState<Role>("employee")
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [magicLink, setMagicLink] = useState<string | null>(null)
 
   const closeCreateDialog = () => {
     setOpen(false)
     setErr(null)
-  }
-
-  const closeSuccessDialog = () => {
-    setMagicLink(null)
-    setOpen(false)
   }
 
   const roleOptions: Role[] =
@@ -242,67 +386,17 @@ function UserDialog({
     setErr(null)
     try {
       const newUser = await createUser({ email, full_name: fullName, department, role })
-      const link = new URL("/auth/onboard", getAppBaseUrl())
-      link.searchParams.set("token", newUser.onboardingToken)
-      setMagicLink(link.toString())
+      onCreated(newUser)
       setEmail("")
       setFullName("")
       setDepartment("")
       setRole("employee")
-      onSaved()
+      setOpen(false)
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to create user")
     } finally {
       setBusy(false)
     }
-  }
-
-  if (magicLink) {
-    return (
-      <Dialog
-        open={Boolean(magicLink)}
-        onOpenChange={(val) => {
-          if (!val) {
-            closeSuccessDialog()
-          }
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          onClose={closeSuccessDialog}
-          className="border-slate-200 bg-white text-slate-900 sm:max-w-md"
-        >
-          <button
-            type="button"
-            aria-label="Close dialog"
-            onClick={closeSuccessDialog}
-            className="absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-          >
-            <span className="text-xl leading-none">&times;</span>
-          </button>
-          <DialogHeader>
-            <DialogTitle>User Created!</DialogTitle>
-            <DialogDescription>
-              Share this magic link with the user so they can activate their account and set their password.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-4">
-            <Label>Magic Link</Label>
-            <div className="flex gap-2">
-              <Input readOnly value={magicLink} className="bg-slate-50" />
-              <Button onClick={() => navigator.clipboard.writeText(magicLink)} variant="outline" className="cursor-pointer">
-                Copy
-              </Button>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => { setMagicLink(null); setOpen(false) }} className="bg-primary text-white cursor-pointer">
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    )
   }
 
   return (

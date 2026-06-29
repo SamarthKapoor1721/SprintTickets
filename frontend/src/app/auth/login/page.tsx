@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { login } from "@/lib/api"
+import { PasswordField } from "@/components/password-field"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -70,13 +71,13 @@ export default function LoginPage() {
                   Forgot?
                 </Link>
               </div>
-              <input
-                type="password"
+              <PasswordField
                 placeholder="••••••••••"
                 className={inputCls}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
                 required
+                autoComplete="current-password"
               />
             </div>
 

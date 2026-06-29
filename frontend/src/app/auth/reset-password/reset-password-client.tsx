@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CheckCircle2, Lock, Sparkles } from "lucide-react"
 import { resetPassword } from "@/lib/api"
+import { PasswordField } from "@/components/password-field"
 
 export default function ResetPasswordClient() {
   const router = useRouter()
@@ -16,11 +17,7 @@ export default function ResetPasswordClient() {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
-  useEffect(() => {
-    if (!token) {
-      setError("Missing reset token.")
-    }
-  }, [token])
+  const tokenMissing = !token
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,9 +71,9 @@ export default function ResetPasswordClient() {
             </div>
 
             <form onSubmit={handleSubmit} className="max-w-md space-y-4">
-              {error && (
+              {(error || tokenMissing) && (
                 <div className="rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
+                  {error ?? "Missing reset token."}
                 </div>
               )}
               {done ? (
@@ -88,24 +85,24 @@ export default function ResetPasswordClient() {
                 <>
                   <div>
                     <label className="mb-1.5 block text-[13px] font-medium text-slate-600">New password</label>
-                    <input
-                      type="password"
+                    <PasswordField
                       placeholder="At least 8 characters"
                       className={inputCls}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={setPassword}
                       required
+                      autoComplete="new-password"
                     />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-[13px] font-medium text-slate-600">Confirm password</label>
-                    <input
-                      type="password"
+                    <PasswordField
                       placeholder="Repeat password"
                       className={inputCls}
                       value={confirm}
-                      onChange={(e) => setConfirm(e.target.value)}
+                      onChange={setConfirm}
                       required
+                      autoComplete="new-password"
                     />
                   </div>
                   <button
