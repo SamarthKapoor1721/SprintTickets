@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/auth";
 import { serializeUser } from "../lib/serializers";
 import { sendPasswordResetEmail } from "../lib/email";
 import { env } from "../env";
+import { normalizeBaseUrl, resolvePublicAppUrl } from "../lib/public-url";
 import { randomUUID } from "crypto";
 
 export const authRouter = Router();
@@ -64,8 +65,8 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8),
 });
 
-function buildPasswordResetUrl(token: string) {
-  const url = new URL("/auth/reset-password", env.APP_URL);
+function buildPasswordResetUrl(token: string, appUrl = env.APP_URL) {
+  const url = new URL("/auth/reset-password", normalizeBaseUrl(appUrl));
   url.searchParams.set("token", token);
   return url.toString();
 }
@@ -105,7 +106,11 @@ authRouter.post(
         },
       });
 
-      await sendPasswordResetEmail(user.email, buildPasswordResetUrl(token), user.fullName);
+      await sendPasswordResetEmail(
+        user.email,
+        buildPasswordResetUrl(token, resolvePublicAppUrl(req)),
+        user.fullName,
+      );
     }
 
     res.json({

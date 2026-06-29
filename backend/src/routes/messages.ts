@@ -9,6 +9,7 @@ import { notFound, unauthorized, badRequest } from "../lib/http-error";
 import { requireAuth } from "../middleware/auth";
 import { serializeContact, serializeDirectMessage } from "../lib/serializers";
 import { sendDirectMessageEmail } from "../lib/email";
+import { resolvePublicAppUrl } from "../lib/public-url";
 
 export const messagesRouter = Router();
 
@@ -219,7 +220,8 @@ messagesRouter.post(
     sendDirectMessageEmail(
       other.email,
       req.authUser.fullName || req.authUser.email,
-      body.content
+      body.content,
+      resolvePublicAppUrl(req),
     ).catch(console.error);
 
     res.status(201).json(serializeDirectMessage(message));

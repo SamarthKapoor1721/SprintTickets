@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 
 import { env } from "../env";
+import { normalizeBaseUrl } from "./public-url";
 
 type InviteEmailResult = {
   sent: boolean;
@@ -50,8 +51,8 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-export function buildOnboardingUrl(token: string) {
-  const url = new URL("/auth/onboard", env.APP_URL);
+export function buildOnboardingUrl(token: string, appUrl = env.APP_URL) {
+  const url = new URL("/auth/onboard", normalizeBaseUrl(appUrl));
   url.searchParams.set("token", token);
   return url.toString();
 }
