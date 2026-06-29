@@ -7,7 +7,7 @@ import { buildOnboardingUrl, sendOnboardingInvite } from "../lib/invite";
 import { unauthorized, badRequest, conflict, forbidden, notFound } from "../lib/http-error";
 import { asyncHandler } from "../lib/async-handler";
 import { prisma } from "../lib/prisma";
-import { canManageUser } from "../lib/rbac";
+import { canCreateUser, canManageUser } from "../lib/rbac";
 import { serializeUser, serializeUserDetail } from "../lib/serializers";
 import { parseBody, parseIntStrict } from "../lib/validation";
 import { requireAuth, requireRoles, requireExactRoles } from "../middleware/auth";
@@ -42,6 +42,8 @@ usersRouter.get(
   "",
   requireAuth,
   asyncHandler(async (req, res) => {
+    if (!req.authUser) throw unauthorized();
+    const authUser = req.authUser;
     const skip = Number.isFinite(Number(req.query.skip))
       ? Math.max(0, parseIntStrict(req.query.skip, "skip"))
       : 0;
@@ -51,6 +53,14 @@ usersRouter.get(
     const users = await prisma.user.findMany({
       skip,
       take: limit,
+      where:
+        authUser.role === UserRole.ceo
+          ? {
+              role: {
+                not: UserRole.super_admin,
+              },
+            }
+          : undefined,
       orderBy: [{ fullName: "asc" }, { id: "asc" }],
     });
     res.json(users.map(serializeUser));
@@ -68,6 +78,10 @@ usersRouter.get(
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw notFound("User not found");
+    }
+
+    if (req.authUser.role === UserRole.ceo && user.role === UserRole.super_admin) {
+      throw forbidden("You do not have permission to view this user");
     }
 
     const [
@@ -167,12 +181,12 @@ const userUpdateSchema = z.object({
 usersRouter.post(
   "",
   requireAuth,
-  requireRoles(UserRole.super_admin, UserRole.ceo),
+  requireRoles(UserRole.super_admin, UserRole.ceo, UserRole.manager),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const body = parseBody(userCreateSchema, req.body);
 
-    if (!canManageUser(req.authUser.role, body.role as UserRole)) {
+    if (!canCreateUser(req.authUser.role, body.role as UserRole)) {
       throw forbidden(`You do not have permission to create a user with role ${body.role}`);
     }
 
@@ -214,7 +228,7 @@ usersRouter.post(
 usersRouter.patch(
   "/:id",
   requireAuth,
-  requireRoles(UserRole.super_admin, UserRole.ceo),
+  requireRoles(UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const targetId = parseIntStrict(req.params.id, "id");
@@ -294,7 +308,7 @@ usersRouter.patch(
 usersRouter.delete(
   "/:id",
   requireAuth,
-  requireRoles(UserRole.super_admin, UserRole.ceo),
+  requireRoles(UserRole.super_admin),
   asyncHandler(async (req, res) => {
     if (!req.authUser) throw unauthorized();
     const targetId = parseIntStrict(req.params.id, "id");

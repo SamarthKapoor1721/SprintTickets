@@ -143,9 +143,16 @@ export default function UserDetailPage() {
     setError(null)
     getUser(id)
       .then(setDetail)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load user"))
+      .catch((e) => {
+        const message = e instanceof Error ? e.message : "Failed to load user"
+        if (message.toLowerCase().includes("permission") || message.toLowerCase().includes("forbidden")) {
+          router.replace("/dashboard/users")
+          return
+        }
+        setError(message)
+      })
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, router])
 
   useEffect(() => {
     const timer = setTimeout(() => {
