@@ -11,6 +11,7 @@ import { canCreateUser, canManageUser } from "../lib/rbac";
 import { serializeUser, serializeUserDetail } from "../lib/serializers";
 import { parseBody, parseIntStrict } from "../lib/validation";
 import { requireAuth, requireRoles, requireExactRoles } from "../middleware/auth";
+import { resolvePublicAppUrl } from "../lib/public-url";
 
 export const usersRouter = Router();
 
@@ -208,7 +209,7 @@ usersRouter.post(
       },
     });
 
-    const onboardingUrl = buildOnboardingUrl(onboardingToken);
+    const onboardingUrl = buildOnboardingUrl(onboardingToken, resolvePublicAppUrl(req));
     const delivery = await sendOnboardingInvite({
       to: body.email,
       fullName: body.full_name,
@@ -266,7 +267,8 @@ usersRouter.patch(
     const shouldSendInvite =
       Boolean(onboardingToken) &&
       (body.resend_invite === true || (nextEmail !== undefined && nextEmail !== targetUser.email));
-    const onboardingUrl = shouldSendInvite && onboardingToken ? buildOnboardingUrl(onboardingToken) : null;
+    const onboardingUrl =
+      shouldSendInvite && onboardingToken ? buildOnboardingUrl(onboardingToken, resolvePublicAppUrl(req)) : null;
 
     const updatedUser = await prisma.user.update({
       where: { id: targetId },

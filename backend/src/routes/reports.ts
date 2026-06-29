@@ -11,6 +11,7 @@ import { requireAuth, requireExactRoles } from "../middleware/auth";
 import { serializeReport } from "../lib/serializers";
 import { canManageProject, projectAccessWhere, reportAccessWhere, taskAccessWhere } from "../lib/rbac";
 import { sendReportNotificationEmail } from "../lib/email";
+import { resolvePublicAppUrl } from "../lib/public-url";
 
 export const reportsRouter = Router();
 
@@ -270,7 +271,8 @@ reportsRouter.post(
         Array.from(recipientEmails),
         report.submitter.fullName || report.submitter.email,
         report.project?.name,
-        report.date
+        report.date,
+        resolvePublicAppUrl(req)
       ).catch(console.error);
     }
 

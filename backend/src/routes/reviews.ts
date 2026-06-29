@@ -11,6 +11,7 @@ import { requireAuth } from "../middleware/auth";
 import { serializeReviewComment, serializeReview } from "../lib/serializers";
 import { hasMinimumRole, isSuperAdmin } from "../lib/rbac";
 import { sendReviewCommentEmail, sendReviewCreatedEmail } from "../lib/email";
+import { resolvePublicAppUrl } from "../lib/public-url";
 import multer from "multer";
 
 export const reviewsRouter = Router();
@@ -218,7 +219,8 @@ reviewsRouter.post(
     sendReviewCreatedEmail(
       Array.from(recipientEmails),
       review.title,
-      req.authUser.fullName || req.authUser.email
+      req.authUser.fullName || req.authUser.email,
+      resolvePublicAppUrl(req),
     ).catch(console.error);
 
     await cacheInvalidate("reviews:list:*");
@@ -381,7 +383,8 @@ reviewsRouter.post(
       Array.from(recipientEmails),
       review.title,
       req.authUser.fullName || req.authUser.email,
-      body.content
+      body.content,
+      resolvePublicAppUrl(req),
     ).catch(console.error);
 
     res.status(201).json(serializeReviewComment(comment));

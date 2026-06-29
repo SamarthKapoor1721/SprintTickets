@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { env } from "../env";
+import { normalizeBaseUrl } from "./public-url";
 
 const transporter = env.SMTP_HOST
   ? nodemailer.createTransport({
@@ -78,11 +79,16 @@ function emailLayout(title: string, innerHtml: string, ctaUrl?: string, ctaText?
   `;
 }
 
+function getAppBaseUrl(appUrl?: string) {
+  return normalizeBaseUrl(appUrl ?? env.APP_URL);
+}
+
 export async function sendReportNotificationEmail(
   recipientEmails: string[],
   submitterName: string,
   projectName?: string | null,
   reportDate?: Date,
+  appUrl?: string,
 ) {
   if (recipientEmails.length === 0) return;
 
@@ -91,19 +97,25 @@ export async function sendReportNotificationEmail(
   const subject = `New Daily Report Submitted: ${submitterName}`;
   const text = `${submitterName} has submitted a new daily progress report${contextStr} for ${dateStr}. Please log in to the dashboard to review it.`;
   const innerHtml = `<p><strong>${escapeHtml(submitterName)}</strong> has submitted a new daily progress report${escapeHtml(contextStr)} for <strong>${dateStr}</strong>.</p>`;
-  const html = emailLayout("New Daily Report", innerHtml, env.APP_URL, "Review Report");
+  const appBaseUrl = getAppBaseUrl(appUrl);
+  const html = emailLayout("New Daily Report", innerHtml, appBaseUrl, "Review Report");
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }
 
-export async function sendDirectMessageEmail(recipientEmail: string, senderName: string, messageContent: string) {
+export async function sendDirectMessageEmail(
+  recipientEmail: string,
+  senderName: string,
+  messageContent: string,
+  appUrl?: string,
+) {
   const subject = `New direct message from ${senderName}`;
   const text = `You have a new message from ${senderName}:\n\n"${messageContent}"\n\nLog in to the dashboard to reply.`;
   const innerHtml = `<p>You have a new message from <strong>${escapeHtml(senderName)}</strong>:</p>
     <div style="background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; font-style: italic;">
       ${escapeHtml(messageContent)}
     </div>`;
-  const html = emailLayout("New Message", innerHtml, env.APP_URL, "Reply in Dashboard");
+  const html = emailLayout("New Message", innerHtml, getAppBaseUrl(appUrl), "Reply in Dashboard");
 
   await dispatchEmail(recipientEmail, subject, text, html);
 }
@@ -113,6 +125,7 @@ export async function sendTaskCommentEmail(
   taskTitle: string,
   commenterName: string,
   commentContent: string,
+  appUrl?: string,
 ) {
   if (recipientEmails.length === 0) return;
 
@@ -122,7 +135,7 @@ export async function sendTaskCommentEmail(
     <div style="background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; font-style: italic;">
       ${escapeHtml(commentContent)}
     </div>`;
-  const html = emailLayout("Task Comment", innerHtml, env.APP_URL, "View Task");
+  const html = emailLayout("Task Comment", innerHtml, getAppBaseUrl(appUrl), "View Task");
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }
@@ -132,6 +145,7 @@ export async function sendReviewCommentEmail(
   reviewTitle: string,
   commenterName: string,
   commentContent: string,
+  appUrl?: string,
 ) {
   if (recipientEmails.length === 0) return;
 
@@ -141,7 +155,8 @@ export async function sendReviewCommentEmail(
     <div style="background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; font-style: italic;">
       ${escapeHtml(commentContent)}
     </div>`;
-  const html = emailLayout("Review Update", innerHtml, `${env.APP_URL}/dashboard/reviews`, "View Review");
+  const appBaseUrl = getAppBaseUrl(appUrl);
+  const html = emailLayout("Review Update", innerHtml, `${appBaseUrl}/dashboard/reviews`, "View Review");
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }
@@ -150,13 +165,19 @@ export async function sendReviewCreatedEmail(
   recipientEmails: string[],
   reviewTitle: string,
   submitterName: string,
+  appUrl?: string,
 ) {
   if (recipientEmails.length === 0) return;
 
   const subject = `New review request: ${reviewTitle}`;
   const text = `${submitterName} has requested your review on "${reviewTitle}".\n\nLog in to the dashboard to view and approve it.`;
   const innerHtml = `<p><strong>${escapeHtml(submitterName)}</strong> has requested your review on "<strong>${escapeHtml(reviewTitle)}</strong>".</p>`;
-  const html = emailLayout("Review Requested", innerHtml, `${env.APP_URL}/dashboard/reviews/pending`, "Review Now");
+  const html = emailLayout(
+    "Review Requested",
+    innerHtml,
+    `${getAppBaseUrl(appUrl)}/dashboard/reviews/pending`,
+    "Review Now",
+  );
 
   await dispatchEmail(recipientEmails, subject, text, html);
 }

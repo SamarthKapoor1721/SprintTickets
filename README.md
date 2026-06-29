@@ -140,7 +140,7 @@ Required variables:
 - `JWT_SECRET` - a strong random secret
 - `PORT` - defaults to `8008`
 - `CORS_ORIGINS` - comma-separated frontend origins
-- `APP_URL` - public frontend origin used by the backend when it builds onboarding links for email invites
+- `APP_URL` - public frontend origin used by the backend for absolute email links. In browser-triggered invite/reset requests, the backend will prefer the incoming frontend origin and fall back to this value for background jobs.
 - `SMTP_URL` or `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` - mail transport configuration for direct invite delivery
 - `EMAIL_FROM` - sender address used for invite emails
 

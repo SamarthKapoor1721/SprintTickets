@@ -10,6 +10,7 @@ import { requireAuth, requireExactRoles } from "../middleware/auth";
 import { serializeTask, serializeTaskComment } from "../lib/serializers";
 import { canManageTask, hasMinimumRole, taskAccessWhere } from "../lib/rbac";
 import { sendTaskCommentEmail } from "../lib/email";
+import { resolvePublicAppUrl } from "../lib/public-url";
 
 export const tasksRouter = Router();
 
@@ -373,7 +374,8 @@ tasksRouter.post(
       Array.from(recipientEmails),
       task.title,
       req.authUser.fullName || req.authUser.email,
-      body.content
+      body.content,
+      resolvePublicAppUrl(req),
     ).catch(console.error);
 
     res.status(201).json(serializeTaskComment(comment));
