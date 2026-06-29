@@ -1,5 +1,5 @@
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { requireAuth, requireRoles } from "../middleware/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { env } from "../env";
@@ -14,8 +14,8 @@ summarizeRouter.post(
   requireAuth,
   requireRoles(UserRole.ceo, UserRole.manager, UserRole.super_admin),
   asyncHandler(async (req, res) => {
-    if (!env.ANTHROPIC_API_KEY) {
-      throw forbidden("AI summarization is not configured (missing ANTHROPIC_API_KEY)");
+    if (!env.OPENAI_API_KEY) {
+      throw forbidden("AI summarization is not configured (missing OPENAI_API_KEY)");
     }
 
     const now = new Date();
@@ -98,17 +98,14 @@ TASK ACTIVITY (last 7 days):
 ${tasksText}
 `;
 
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-    const message = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+    const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
       max_tokens: 1024,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = message.content
-      .filter((block) => block.type === "text")
-      .map((block) => (block as { type: "text"; text: string }).text)
-      .join("\n");
+    const text = response.choices[0]?.message?.content || "";
 
     res.json({ summary: text, generated_at: new Date().toISOString() });
   }),
