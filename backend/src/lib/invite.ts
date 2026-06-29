@@ -115,34 +115,14 @@ export async function sendOnboardingInvite({
   `;
 
   try {
-    const sendPromise = mailer.sendMail({
+    await mailer.sendMail({
       from: env.EMAIL_FROM,
       to,
       subject,
       text,
       html,
     });
-    const timeoutMs = 2000;
-    const timeoutPromise = new Promise<InviteEmailResult>((resolve) => {
-      setTimeout(() => {
-        resolve({
-          sent: false,
-          error: "Email delivery is taking longer than expected",
-        });
-      }, timeoutMs);
-    });
-
-    const result = await Promise.race([
-      sendPromise
-        .then(() => ({ sent: true, error: null }))
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : "Failed to send invite email";
-          return { sent: false, error: message };
-        }),
-      timeoutPromise,
-    ]);
-
-    return result;
+    return { sent: true, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to send invite email";
     return { sent: false, error: message };

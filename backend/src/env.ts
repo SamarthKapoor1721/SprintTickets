@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { z } from "zod";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
@@ -21,6 +21,7 @@ const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   REDIS_URL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -38,4 +39,5 @@ export const env = {
   isProduction: parsed.data.NODE_ENV === "production",
   REDIS_URL: parsed.data.REDIS_URL ?? null,
   ANTHROPIC_API_KEY: parsed.data.ANTHROPIC_API_KEY ?? null,
+  OPENAI_API_KEY: parsed.data.OPENAI_API_KEY ?? null,
 };
