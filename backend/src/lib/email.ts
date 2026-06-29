@@ -21,13 +21,38 @@ const transporter = env.SMTP_HOST
  * Helper to dispatch emails. If SMTP is not configured, it logs the email to console instead.
  */
 async function dispatchEmail(to: string | string[], subject: string, text: string, html: string) {
-  if (!transporter) {
+  const isResend = env.SMTP_HOST === "smtp.resend.com" && !!env.SMTP_PASS;
+
+  if (!isResend && !transporter) {
     // eslint-disable-next-line no-console
     console.log(`[Email Mock] To: ${to} | Subject: ${subject}\n\n${text}`);
     return;
   }
 
   try {
+    if (isResend && env.SMTP_PASS) {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.SMTP_PASS}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM,
+          to: Array.isArray(to) ? to : [to],
+          subject,
+          text,
+          html,
+        }),
+      });
+      if (!res.ok) {
+        console.error("Resend API failed:", await res.text());
+      }
+      return;
+    }
+
+    if (!transporter) return;
+
     await transporter.sendMail({
       from: env.EMAIL_FROM,
       to: Array.isArray(to) ? to.join(", ") : to,

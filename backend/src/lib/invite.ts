@@ -79,8 +79,9 @@ export async function sendOnboardingInvite({
   fullName,
   onboardingUrl,
 }: InviteEmailArgs): Promise<InviteEmailResult> {
+  const isResend = env.SMTP_HOST === "smtp.resend.com" && !!env.SMTP_PASS;
   const mailer = getTransport();
-  if (!mailer) {
+  if (!isResend && !mailer) {
     return {
       sent: false,
       error: getTransportConfigError() ?? "Email delivery is not configured",
@@ -115,6 +116,27 @@ export async function sendOnboardingInvite({
   `;
 
   try {
+    if (isResend && env.SMTP_PASS) {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.SMTP_PASS}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM,
+          to,
+          subject,
+          text,
+          html,
+        }),
+      });
+      if (!res.ok) throw new Error(`Resend API error: ${await res.text()}`);
+      return { sent: true, error: null };
+    }
+
+    if (!mailer) throw new Error("Email delivery is not configured");
+
     await mailer.sendMail({
       from: env.EMAIL_FROM,
       to,
