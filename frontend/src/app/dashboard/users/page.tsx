@@ -39,8 +39,9 @@ export default function UsersPage() {
   const { user } = useAuth()
   const role = user?.role ?? "employee"
 
-  const canManage = role === "super_admin" || role === "ceo"
   const canViewProfiles = role === "ceo" || role === "super_admin"
+  const canCreateUsers = role === "super_admin" || role === "ceo" || role === "manager"
+  const canEditUsers = role === "super_admin"
 
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,14 +74,16 @@ export default function UsersPage() {
     return <div className="text-sm text-slate-500">You do not have access to view users.</div>
   }
 
+  const visibleUsers = role === "ceo" ? users.filter((u) => u.role !== "super_admin") : users
+
   // Group users: known teams first (in order), then "Other" for anyone with a non-standard or null dept
   const grouped: { label: string; members: User[] }[] = TEAMS.map((team) => ({
     label: team,
-    members: users.filter((u) => u.department === team),
+    members: visibleUsers.filter((u) => u.department === team),
   })).filter((g) => g.members.length > 0)
 
   const knownDepts = new Set(TEAMS as readonly string[])
-  const others = users.filter((u) => !u.department || !knownDepts.has(u.department))
+  const others = visibleUsers.filter((u) => !u.department || !knownDepts.has(u.department))
   if (others.length > 0) grouped.push({ label: "Other", members: others })
 
   return (
@@ -90,7 +93,7 @@ export default function UsersPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Users</h1>
           <p className="text-slate-500">Manage directory and system access.</p>
         </div>
-        {canManage && <UserDialog onSaved={load} currentRole={role} />}
+        {canCreateUsers && <UserDialog onSaved={load} currentRole={role} />}
       </div>
 
       {error ? (
@@ -162,7 +165,7 @@ export default function UsersPage() {
                             >
                               <Eye className="h-4 w-4" />
                             </Link>
-                            {canManage && (
+                            {canEditUsers && (
                               <Link
                                 href={`/dashboard/users/${u.id}?edit=1`}
                                 title="Edit"
@@ -223,6 +226,13 @@ function UserDialog({
     setOpen(false)
   }
 
+  const roleOptions: Role[] =
+    currentRole === "super_admin"
+      ? ["employee", "manager", "ceo"]
+      : currentRole === "ceo"
+        ? ["employee", "manager"]
+        : ["employee"]
+
   const submit = async () => {
     if (!email.trim()) {
       setErr("Email is required")
@@ -258,9 +268,18 @@ function UserDialog({
         }}
       >
         <DialogContent
+          showCloseButton={false}
           onClose={closeSuccessDialog}
           className="border-slate-200 bg-white text-slate-900 sm:max-w-md"
         >
+          <button
+            type="button"
+            aria-label="Close dialog"
+            onClick={closeSuccessDialog}
+            className="absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+          >
+            <span className="text-xl leading-none">&times;</span>
+          </button>
           <DialogHeader>
             <DialogTitle>User Created!</DialogTitle>
             <DialogDescription>
@@ -296,9 +315,18 @@ function UserDialog({
         }
       />
       <DialogContent
+        showCloseButton={false}
         onClose={closeCreateDialog}
         className="border-slate-200 bg-white text-slate-900 sm:max-w-md"
       >
+        <button
+          type="button"
+          aria-label="Close dialog"
+          onClick={closeCreateDialog}
+          className="absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+        >
+          <span className="text-xl leading-none">&times;</span>
+        </button>
         <DialogHeader>
           <DialogTitle>Create User</DialogTitle>
           <DialogDescription>Add a new member to the workspace.</DialogDescription>
@@ -345,9 +373,11 @@ function UserDialog({
               onChange={(e) => setRole(e.target.value as Role)}
               className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
             >
-              <option value="employee">Employee</option>
-              <option value="manager">Manager</option>
-              {currentRole === "super_admin" && <option value="ceo">CEO</option>}
+              {roleOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option.replace("_", " ")}
+                </option>
+              ))}
             </select>
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}

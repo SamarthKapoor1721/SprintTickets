@@ -81,3 +81,10 @@ export function canManageUser(currentUserRole: UserRole, targetUserRole: UserRol
   if (currentUserRole === UserRole.ceo && targetUserRole !== UserRole.super_admin) return true;
   return false;
 }
+
+export function canCreateUser(currentUserRole: UserRole, targetUserRole: UserRole): boolean {
+  if (currentUserRole === UserRole.super_admin) return true;
+  if (currentUserRole === UserRole.ceo) return targetUserRole !== UserRole.super_admin;
+  if (currentUserRole === UserRole.manager) return targetUserRole === UserRole.employee;
+  return false;
+}
